@@ -44,5 +44,14 @@ services:
       redis:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+    container_name: evalforge-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
 volumes:
   evalforge-postgres-data:
