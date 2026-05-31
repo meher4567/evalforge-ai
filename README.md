@@ -29,8 +29,10 @@ python -m pip install --user uv
 If PowerShell cannot find `uv` after installation, add this folder to your PATH:
 
 ```powershell
-$env:APPDATA\Python\Python313\Scripts
+python -m site --user-base
 ```
+
+On Windows, the `uv.exe` script is usually in the `Scripts` folder inside that user-base path.
 
 ## Local Backend Setup
 
@@ -63,6 +65,8 @@ Start the backend locally without Docker:
 ```powershell
 uv run --directory backend uvicorn app.main:app --reload
 ```
+
+When running the backend without PostgreSQL and Redis, `/healthz` should return `degraded`. That still proves the API is alive. The full Docker Compose stack should return `ok`.
 
 ## Docker Compose
 
