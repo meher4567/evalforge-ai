@@ -66,11 +66,14 @@ def retrieve(question: str, corpus: list[dict[str, Any]], top_k: int) -> list[di
     for item in corpus:
         text = str(item.get("text", ""))
         text_tokens = set(tokenize(text))
+        doc_id = str(item["doc_id"])
+        subject_tokens = set(tokenize(doc_id.removeprefix("python-")))
         overlap = len(question_tokens & text_tokens)
-        score = overlap / max(len(question_tokens), 1)
+        subject_boost = 1.0 if subject_tokens & question_tokens else 0.0
+        score = (overlap / max(len(question_tokens), 1)) + subject_boost
         scored.append(
             {
-                "doc_id": str(item["doc_id"]),
+                "doc_id": doc_id,
                 "chunk_text": text,
                 "score": round(score, 6),
                 "answer": str(item.get("answer", "")),

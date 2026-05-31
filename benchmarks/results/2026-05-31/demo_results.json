@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-05-31T12:30:56.244137+00:00",
+  "benchmark": "deterministic_demo_rag_regression",
+  "reproduction_command": "uv run --directory backend python ../benchmarks/run_demo.py --cases 500",
+  "summary": {
+    "case_count": 500,
+    "total_case_executions": 1000,
+    "elapsed_seconds": 8.77,
+    "cases_per_minute": 6841.35,
+    "baseline_status": "completed",
+    "candidate_status": "completed",
+    "gate_verdict": "fail",
+    "metrics": {
+      "pass_rate": {
+        "baseline_point": 1.0,
+        "baseline_ci_lower": 1.0,
+        "baseline_ci_upper": 1.0,
+        "candidate_point": 0.0,
+        "candidate_ci_lower": 0.0,
+        "candidate_ci_upper": 0.0,
+        "delta_point": -1.0,
+        "delta_ci_lower": -1.0,
+        "delta_ci_upper": -1.0
+      },
+      "semantic_similarity": {
+        "baseline_point": 1.0,
+        "baseline_ci_lower": 1.0,
+        "baseline_ci_upper": 1.0,
+        "candidate_point": 0.284951,
+        "candidate_ci_lower": 0.278673,
+        "candidate_ci_upper": 0.291027,
+        "delta_point": -0.715049,
+        "delta_ci_lower": -0.721327,
+        "delta_ci_upper": -0.708973
+      },
+      "p95_latency_ms": {
+        "baseline_point": 120.0,
+        "baseline_ci_lower": 120.0,
+        "baseline_ci_upper": 120.0,
+        "candidate_point": 260.0,
+        "candidate_ci_lower": 260.0,
+        "candidate_ci_upper": 260.0,
+        "delta_point": 140.0,
+        "delta_ci_lower": 140.0,
+        "delta_ci_upper": 140.0
+      },
+      "cost_mean_usd": {
+        "baseline_point": 4e-06,
+        "baseline_ci_lower": 4e-06,
+        "baseline_ci_upper": 4e-06,
+        "candidate_point": 4e-06,
+        "candidate_ci_lower": 4e-06,
+        "candidate_ci_upper": 4e-06,
+        "delta_point": 0.0,
+        "delta_ci_lower": 0.0,
+        "delta_ci_upper": 0.0
+      }
+    },
+    "gate_reasons": [
+      {
+        "metric": "pass_rate",
+        "verdict": "fail",
+        "tolerance": 0.02,
+        "delta_point": -1.0
+      },
+      {
+        "metric": "semantic_similarity",
+        "verdict": "fail",
+        "tolerance": 0.02,
+        "delta_point": -0.715049
+      },
+      {
+        "metric": "p95_latency_ms",
+        "verdict": "fail",
+        "tolerance": 50.0,
+        "delta_point": 140.0
+      }
+    ]
+  }
+}
