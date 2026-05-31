@@ -1,5 +1,16 @@
 """API schema definitions."""
 
+from app.schemas.execution import (
+    ComparisonCreate,
+    ComparisonRead,
+    EvalResultRead,
+    GateDecisionRead,
+    RegressionReportRead,
+    RunCreate,
+    RunItemRead,
+    RunRead,
+    TraceRead,
+)
 from app.schemas.registry import (
     AppCreate,
     AppRead,
@@ -30,4 +41,13 @@ __all__ = [
     "EvalSuiteSummary",
     "EvaluatorConfigCreate",
     "EvaluatorConfigRead",
+    "ComparisonCreate",
+    "ComparisonRead",
+    "EvalResultRead",
+    "GateDecisionRead",
+    "RegressionReportRead",
+    "RunCreate",
+    "RunItemRead",
+    "RunRead",
+    "TraceRead",
 ]
