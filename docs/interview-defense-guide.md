@@ -40,6 +40,7 @@ Backend:
 - `backend/app/services/run_executor.py`: run execution orchestration.
 - `backend/app/services/comparison.py`: metric aggregation and gate verdicts.
 - `backend/app/services/statistics.py`: bootstrap confidence intervals.
+- `backend/app/services/flakiness.py`: repeated-score flaky case classification.
 - `backend/app/services/calibration.py`: calibration metrics.
 
 Frontend:
@@ -121,6 +122,10 @@ A gate rule says:
 
 The final verdict is the worst metric verdict.
 
+### Flaky Eval
+
+A flaky eval case has unstable scores across repeated runs. EvalForge computes standard deviation across repeated scores and marks cases as stable, flaky, or inconclusive. Flaky and inconclusive cases should not drive hard gate failures.
+
 ## Likely Interview Questions
 
 ### Why not just manually test a few prompts?
@@ -141,7 +146,7 @@ The demo candidate intentionally injects forbidden synthetic claims. That makes 
 
 ### What is still missing?
 
-Real Celery workers, Docker runtime verification, database-backed dashboard aggregation, final hand-labeled calibration findings, and demo video. The project documents these honestly.
+Real Celery workers, Docker runtime verification, real repeated-run flakiness over adapter executions, database-backed dashboard aggregation, final hand-labeled calibration findings, and demo video. The project documents these honestly.
 
 ## How To Study This Project
 

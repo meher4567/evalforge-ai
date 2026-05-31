@@ -1,0 +1,396 @@
+{
+  "generated_at": "2026-05-31T13:08:50.590989+00:00",
+  "benchmark": "deterministic_flaky_eval_detection",
+  "protocol": {
+    "reruns_per_case": 5,
+    "stable_stddev_lt": 0.05,
+    "flaky_stddev_gte": 0.05,
+    "flaky_stddev_lt": 0.2,
+    "inconclusive_stddev_gte": 0.2
+  },
+  "summary": {
+    "total_cases": 50,
+    "stable_count": 25,
+    "flaky_count": 15,
+    "inconclusive_count": 10,
+    "excluded_from_gate": [
+      "flaky-001",
+      "flaky-002",
+      "flaky-003",
+      "flaky-004",
+      "flaky-005",
+      "flaky-006",
+      "flaky-007",
+      "flaky-008",
+      "flaky-009",
+      "flaky-010",
+      "flaky-011",
+      "flaky-012",
+      "flaky-013",
+      "flaky-014",
+      "flaky-015",
+      "inconclusive-001",
+      "inconclusive-002",
+      "inconclusive-003",
+      "inconclusive-004",
+      "inconclusive-005",
+      "inconclusive-006",
+      "inconclusive-007",
+      "inconclusive-008",
+      "inconclusive-009",
+      "inconclusive-010"
+    ]
+  },
+  "classifications": {
+    "stable-001": {
+      "case_id": "stable-001",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-002": {
+      "case_id": "stable-002",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-003": {
+      "case_id": "stable-003",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-004": {
+      "case_id": "stable-004",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-005": {
+      "case_id": "stable-005",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-006": {
+      "case_id": "stable-006",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-007": {
+      "case_id": "stable-007",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-008": {
+      "case_id": "stable-008",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-009": {
+      "case_id": "stable-009",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-010": {
+      "case_id": "stable-010",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-011": {
+      "case_id": "stable-011",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-012": {
+      "case_id": "stable-012",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-013": {
+      "case_id": "stable-013",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-014": {
+      "case_id": "stable-014",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-015": {
+      "case_id": "stable-015",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-016": {
+      "case_id": "stable-016",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-017": {
+      "case_id": "stable-017",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-018": {
+      "case_id": "stable-018",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-019": {
+      "case_id": "stable-019",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-020": {
+      "case_id": "stable-020",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-021": {
+      "case_id": "stable-021",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-022": {
+      "case_id": "stable-022",
+      "run_count": 5,
+      "mean_score": 0.87,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-023": {
+      "case_id": "stable-023",
+      "run_count": 5,
+      "mean_score": 0.88,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-024": {
+      "case_id": "stable-024",
+      "run_count": 5,
+      "mean_score": 0.89,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "stable-025": {
+      "case_id": "stable-025",
+      "run_count": 5,
+      "mean_score": 0.86,
+      "score_stddev": 0.007071067811865481,
+      "classification": "stable"
+    },
+    "flaky-001": {
+      "case_id": "flaky-001",
+      "run_count": 5,
+      "mean_score": 0.73,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-002": {
+      "case_id": "flaky-002",
+      "run_count": 5,
+      "mean_score": 0.75,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-003": {
+      "case_id": "flaky-003",
+      "run_count": 5,
+      "mean_score": 0.77,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-004": {
+      "case_id": "flaky-004",
+      "run_count": 5,
+      "mean_score": 0.73,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-005": {
+      "case_id": "flaky-005",
+      "run_count": 5,
+      "mean_score": 0.75,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-006": {
+      "case_id": "flaky-006",
+      "run_count": 5,
+      "mean_score": 0.77,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-007": {
+      "case_id": "flaky-007",
+      "run_count": 5,
+      "mean_score": 0.73,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-008": {
+      "case_id": "flaky-008",
+      "run_count": 5,
+      "mean_score": 0.75,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-009": {
+      "case_id": "flaky-009",
+      "run_count": 5,
+      "mean_score": 0.77,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-010": {
+      "case_id": "flaky-010",
+      "run_count": 5,
+      "mean_score": 0.73,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-011": {
+      "case_id": "flaky-011",
+      "run_count": 5,
+      "mean_score": 0.75,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-012": {
+      "case_id": "flaky-012",
+      "run_count": 5,
+      "mean_score": 0.77,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-013": {
+      "case_id": "flaky-013",
+      "run_count": 5,
+      "mean_score": 0.73,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-014": {
+      "case_id": "flaky-014",
+      "run_count": 5,
+      "mean_score": 0.75,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "flaky-015": {
+      "case_id": "flaky-015",
+      "run_count": 5,
+      "mean_score": 0.77,
+      "score_stddev": 0.0654217089351845,
+      "classification": "flaky"
+    },
+    "inconclusive-001": {
+      "case_id": "inconclusive-001",
+      "run_count": 5,
+      "mean_score": 0.542,
+      "score_stddev": 0.2919863010485252,
+      "classification": "inconclusive"
+    },
+    "inconclusive-002": {
+      "case_id": "inconclusive-002",
+      "run_count": 5,
+      "mean_score": 0.5660000000000001,
+      "score_stddev": 0.2913829095880539,
+      "classification": "inconclusive"
+    },
+    "inconclusive-003": {
+      "case_id": "inconclusive-003",
+      "run_count": 5,
+      "mean_score": 0.542,
+      "score_stddev": 0.2919863010485252,
+      "classification": "inconclusive"
+    },
+    "inconclusive-004": {
+      "case_id": "inconclusive-004",
+      "run_count": 5,
+      "mean_score": 0.5660000000000001,
+      "score_stddev": 0.2913829095880539,
+      "classification": "inconclusive"
+    },
+    "inconclusive-005": {
+      "case_id": "inconclusive-005",
+      "run_count": 5,
+      "mean_score": 0.542,
+      "score_stddev": 0.2919863010485252,
+      "classification": "inconclusive"
+    },
+    "inconclusive-006": {
+      "case_id": "inconclusive-006",
+      "run_count": 5,
+      "mean_score": 0.5660000000000001,
+      "score_stddev": 0.2913829095880539,
+      "classification": "inconclusive"
+    },
+    "inconclusive-007": {
+      "case_id": "inconclusive-007",
+      "run_count": 5,
+      "mean_score": 0.542,
+      "score_stddev": 0.2919863010485252,
+      "classification": "inconclusive"
+    },
+    "inconclusive-008": {
+      "case_id": "inconclusive-008",
+      "run_count": 5,
+      "mean_score": 0.5660000000000001,
+      "score_stddev": 0.2913829095880539,
+      "classification": "inconclusive"
+    },
+    "inconclusive-009": {
+      "case_id": "inconclusive-009",
+      "run_count": 5,
+      "mean_score": 0.542,
+      "score_stddev": 0.2919863010485252,
+      "classification": "inconclusive"
+    },
+    "inconclusive-010": {
+      "case_id": "inconclusive-010",
+      "run_count": 5,
+      "mean_score": 0.5660000000000001,
+      "score_stddev": 0.2913829095880539,
+      "classification": "inconclusive"
+    }
+  }
+}

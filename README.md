@@ -29,6 +29,7 @@ The candidate is intentionally bad. It injects forbidden synthetic claims so the
 - bootstrap confidence intervals for comparison metrics
 - gate verdicts across quality, latency, and cost
 - dashboard snapshot API at `GET /api/dashboard/demo`
+- flaky-eval detection over repeated case scores
 - React/Vite dashboard with overview, run detail, comparison, traces, calibration preview, and settings
 - backend and frontend tests
 - GitHub Actions CI workflow
@@ -142,6 +143,18 @@ The committed reference result is:
 benchmarks/results/2026-05-31/demo_results.json
 ```
 
+Run the deterministic flaky-eval benchmark:
+
+```powershell
+uv run --directory backend python ../benchmarks/flaky_eval.py
+```
+
+The committed flaky-eval result is:
+
+```text
+benchmarks/results/2026-05-31/flaky_eval_results.json
+```
+
 ## Full Verification
 
 Backend:
@@ -200,4 +213,4 @@ I started EvalForge by building a reproducible backend foundation. FastAPI expos
 
 EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, persist traces and evaluator results, compute comparison metrics with confidence intervals, and show the result in a dashboard. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, and the trace inspector shows the retrieved context and exact reason.
 
-The next big upgrade is replacing the in-process executor with real Celery workers, turning the dashboard snapshot into database aggregation, and completing the hand-labeled calibration study.
+The next big upgrade is replacing the in-process executor with real Celery workers, running flaky detection on real repeated adapter executions, turning the dashboard snapshot into database aggregation, and completing the hand-labeled calibration study.

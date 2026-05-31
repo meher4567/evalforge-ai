@@ -14,6 +14,7 @@ Why it is strong:
 - run execution persists traces and evaluator results
 - comparison gates include bootstrap confidence intervals
 - 500-case benchmark is measured and committed
+- flaky-eval detection benchmark is measured and committed
 - React dashboard is implemented, tested, and visually verified
 - docs explain the architecture and phase decisions
 
@@ -35,7 +36,7 @@ Why it is not yet A-:
 | Phase 3: Evaluators | Complete for MVP | exact match, keywords, semantic similarity, retrieval hit rate, forbidden claim, latency, cost |
 | Phase 4: Regression gates | Complete for MVP | comparison service, bootstrap CIs, gate rules, regression report |
 | Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, responsive screenshots, `GET /api/dashboard/demo` |
-| Phase 6: Advanced rigor | Partial | calibration utilities and rubric exist; hand-labeling study still pending |
+| Phase 6: Advanced rigor | Partial | flaky-eval detection complete; calibration utilities and rubric exist; hand-labeling study still pending |
 | Operational polish | Partial | CI workflow added; Docker runtime and demo video pending |
 
 ## What To Finish Next
@@ -77,7 +78,17 @@ Required proof:
 - worker processes cases
 - run status updates from running to completed
 
-### 3. Calibration gold set
+### 3. Real repeated-run flakiness benchmark
+
+The current flaky-eval benchmark uses synthetic repeated scores. Next, run real adapter executions:
+
+```powershell
+uv run --directory backend python ../benchmarks/flaky_eval.py
+```
+
+Then extend the script to sample real tagged cases and execute each case `N=5` times.
+
+### 4. Calibration gold set
 
 Complete the hand-labeled calibration study:
 
@@ -88,7 +99,7 @@ Complete the hand-labeled calibration study:
 
 Do not put calibration numbers on the resume until this is done.
 
-### 4. Docker runtime verification
+### 5. Docker runtime verification
 
 When Docker Desktop is installed:
 
@@ -99,7 +110,7 @@ Invoke-RestMethod http://localhost:8000/healthz
 
 Expected full-stack health is `ok`. Without Docker, local API health can be `degraded` because Postgres and Redis are unavailable.
 
-### 5. Demo video
+### 6. Demo video
 
 Record a short demo:
 
