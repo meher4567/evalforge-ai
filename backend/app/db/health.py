@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import get_settings
 
 
-async def check_database(database_url: str | None = None) -> bool:
+async def check_database(
+    database_url: str | None = None,
+    timeout_seconds: float | None = None,
+) -> bool:
     settings = get_settings()
     engine = create_async_engine(
         database_url or settings.database_url,
@@ -14,7 +17,7 @@ async def check_database(database_url: str | None = None) -> bool:
     )
 
     try:
-        async with asyncio.timeout(settings.health_check_timeout_seconds):
+        async with asyncio.timeout(timeout_seconds or settings.health_check_timeout_seconds):
             async with engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
         return True

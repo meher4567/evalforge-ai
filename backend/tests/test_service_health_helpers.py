@@ -6,13 +6,16 @@ from app.db.health import check_database
 
 @pytest.mark.anyio
 async def test_check_database_returns_false_for_invalid_database_url():
-    ok = await check_database("postgresql+asyncpg://invalid:invalid@127.0.0.1:1/invalid")
+    ok = await check_database(
+        "postgresql+asyncpg://invalid:invalid@127.0.0.1:1/invalid",
+        timeout_seconds=0.1,
+    )
 
     assert ok is False
 
 
 @pytest.mark.anyio
 async def test_check_redis_returns_false_for_invalid_redis_url():
-    ok = await check_redis("redis://127.0.0.1:1/0")
+    ok = await check_redis("redis://127.0.0.1:1/0", timeout_seconds=0.1)
 
     assert ok is False
