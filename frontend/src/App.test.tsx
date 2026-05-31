@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { benchmarkSummary, metrics, runs, traceCases } from "./data/demo";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("EvalForge dashboard", () => {
   it("renders the measured gate verdict on the overview", () => {
@@ -39,5 +44,32 @@ describe("EvalForge dashboard", () => {
 
     expect(screen.getByText("Calibration preview")).toBeInTheDocument();
     expect(screen.getByText("methodology pending")).toBeInTheDocument();
+  });
+
+  it("hydrates dashboard data from the backend snapshot when available", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          benchmarkSummary: {
+            ...benchmarkSummary,
+            caseCount: 321,
+            totalExecutions: 642,
+          },
+          metrics,
+          runs,
+          traceCases,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByText("321 cases")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/demo");
   });
 });

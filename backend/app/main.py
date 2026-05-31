@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.apps import router as apps_router
 from app.api.comparisons import router as comparisons_router
+from app.api.dashboard import router as dashboard_router
 from app.api.evaluator_configs import router as evaluator_configs_router
 from app.api.health import router as health_router
 from app.api.runs import router as runs_router
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
     app.include_router(evaluator_configs_router)
     app.include_router(runs_router)
     app.include_router(comparisons_router)
+    app.include_router(dashboard_router)
     return app
 
 

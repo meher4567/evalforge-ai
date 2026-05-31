@@ -21,7 +21,7 @@ Why it is not yet A-:
 
 - Docker Compose was not runtime-verified on this machine because Docker is not installed
 - Celery worker execution is still represented by an in-process executor
-- dashboard uses local demo snapshot data instead of live backend dashboard endpoints
+- dashboard uses a benchmark-backed demo API snapshot instead of live aggregation over arbitrary database runs
 - final hand-labeled calibration study is pending
 - demo video is not recorded
 
@@ -34,23 +34,23 @@ Why it is not yet A-:
 | Phase 2: Runner | Prototype complete | Deterministic in-process run executor with persisted run items, traces, and results |
 | Phase 3: Evaluators | Complete for MVP | exact match, keywords, semantic similarity, retrieval hit rate, forbidden claim, latency, cost |
 | Phase 4: Regression gates | Complete for MVP | comparison service, bootstrap CIs, gate rules, regression report |
-| Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, responsive screenshots |
+| Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, responsive screenshots, `GET /api/dashboard/demo` |
 | Phase 6: Advanced rigor | Partial | calibration utilities and rubric exist; hand-labeling study still pending |
 | Operational polish | Partial | CI workflow added; Docker runtime and demo video pending |
 
 ## What To Finish Next
 
-### 1. Live dashboard API
+### 1. Database-backed dashboard aggregation
 
-Add a backend endpoint that returns the dashboard snapshot currently represented in `frontend/src/data/demo.ts`.
+Replace the benchmark-backed demo endpoint with a query-driven dashboard aggregation.
 
-Suggested endpoint:
+Current endpoint:
 
 ```text
 GET /api/dashboard/demo
 ```
 
-Return:
+It already returns:
 
 - benchmark summary
 - metrics
@@ -58,6 +58,13 @@ Return:
 - failure cases
 - trace details
 - gate rules
+
+Next improvement:
+
+- find the latest comparison from the database
+- join the baseline and candidate runs
+- compute failed cases from persisted evaluator results
+- return real traces from the trace table
 
 ### 2. Celery worker path
 

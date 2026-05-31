@@ -12,7 +12,8 @@ import {
   Route,
   Settings,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { loadDashboardSnapshot, type DashboardSnapshot } from "./api/client";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { ComparisonBars } from "./components/ComparisonBars";
 import { MetricCard } from "./components/MetricCard";
@@ -31,6 +32,14 @@ import {
   type ViewId,
 } from "./data/demo";
 import { formatCost, formatLatency, formatPercent } from "./lib/format";
+
+const fallbackSnapshot: DashboardSnapshot = {
+  benchmarkSummary,
+  metrics,
+  runs,
+  traceCases,
+  gateRules,
+};
 
 const navItems: Array<{ id: ViewId; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -113,12 +122,12 @@ function Sidebar({
   );
 }
 
-function GatePanel() {
+function GatePanel({ summary }: { summary: DashboardSnapshot["benchmarkSummary"] }) {
   return (
     <section className="gate-panel" aria-label="Gate verdict">
       <div>
         <h2>Gate verdict</h2>
-        <p>{benchmarkSummary.caseCount} cases | {benchmarkSummary.totalExecutions} executions</p>
+        <p>{summary.caseCount} cases | {summary.totalExecutions} executions</p>
       </div>
       <div className="gate-panel__verdict">
         <StatusPill status="fail" label="fail" />
@@ -127,11 +136,11 @@ function GatePanel() {
       <dl className="gate-panel__numbers">
         <div>
           <dt>Elapsed</dt>
-          <dd>{benchmarkSummary.elapsedSeconds.toFixed(2)}s</dd>
+          <dd>{summary.elapsedSeconds.toFixed(2)}s</dd>
         </div>
         <div>
           <dt>Throughput</dt>
-          <dd>{Math.round(benchmarkSummary.casesPerMinute).toLocaleString()} cases/min</dd>
+          <dd>{Math.round(summary.casesPerMinute).toLocaleString()} cases/min</dd>
         </div>
       </dl>
     </section>
@@ -139,11 +148,13 @@ function GatePanel() {
 }
 
 function OverviewView({
+  snapshot,
   selectedRunId,
   onSelectRun,
   selectedTraceIndex,
   onSelectTraceIndex,
 }: {
+  snapshot: DashboardSnapshot;
   selectedRunId: string;
   onSelectRun: (runId: string) => void;
   selectedTraceIndex: number;
@@ -153,16 +164,16 @@ function OverviewView({
     <div className="detail-layout overview-layout">
       <div className="dashboard-grid">
         <div className="metric-grid">
-          {metrics.map((metric) => (
+          {snapshot.metrics.map((metric) => (
             <MetricCard key={metric.key} metric={metric} />
           ))}
         </div>
-        <GatePanel />
-        <ComparisonBars metrics={metrics} />
-        <RunsTable runs={runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
+        <GatePanel summary={snapshot.benchmarkSummary} />
+        <ComparisonBars metrics={snapshot.metrics} />
+        <RunsTable runs={snapshot.runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
       </div>
       <TraceInspector
-        cases={traceCases}
+        cases={snapshot.traceCases}
         selectedIndex={selectedTraceIndex}
         onSelectIndex={onSelectTraceIndex}
       />
@@ -171,17 +182,19 @@ function OverviewView({
 }
 
 function RunDetailView({
+  snapshot,
   selectedRunId,
   onSelectRun,
   selectedTraceIndex,
   onSelectTraceIndex,
 }: {
+  snapshot: DashboardSnapshot;
   selectedRunId: string;
   onSelectRun: (runId: string) => void;
   selectedTraceIndex: number;
   onSelectTraceIndex: (index: number) => void;
 }) {
-  const selectedRun = runs.find((run) => run.id === selectedRunId) ?? runs[0];
+  const selectedRun = snapshot.runs.find((run) => run.id === selectedRunId) ?? snapshot.runs[0];
   const completed = selectedRun.status === "partial" ? selectedRun.cases - 4 : selectedRun.cases;
 
   return (
@@ -213,10 +226,10 @@ function RunDetailView({
             <span style={{ width: `${(completed / selectedRun.cases) * 100}%` }} />
           </div>
         </section>
-        <RunsTable runs={runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
+        <RunsTable runs={snapshot.runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
       </main>
       <TraceInspector
-        cases={traceCases}
+        cases={snapshot.traceCases}
         selectedIndex={selectedTraceIndex}
         onSelectIndex={onSelectTraceIndex}
       />
@@ -295,20 +308,22 @@ function FailureTable({
 }
 
 function ComparisonView({
+  snapshot,
   filter,
   onFilterChange,
   onSelectTrace,
 }: {
+  snapshot: DashboardSnapshot;
   filter: FailureFilter;
   onFilterChange: (filter: FailureFilter) => void;
   onSelectTrace: (index: number) => void;
 }) {
   return (
     <div className="comparison-layout">
-      <GatePanel />
-      <ComparisonBars metrics={metrics} />
+      <GatePanel summary={snapshot.benchmarkSummary} />
+      <ComparisonBars metrics={snapshot.metrics} />
       <FailureTable
-        failures={traceCases}
+        failures={snapshot.traceCases}
         filter={filter}
         onFilterChange={onFilterChange}
         onSelectTrace={onSelectTrace}
@@ -318,9 +333,11 @@ function ComparisonView({
 }
 
 function TracesView({
+  traceCases,
   selectedTraceIndex,
   onSelectTraceIndex,
 }: {
+  traceCases: TraceCase[];
   selectedTraceIndex: number;
   onSelectTraceIndex: (index: number) => void;
 }) {
@@ -341,7 +358,7 @@ function TracesView({
   );
 }
 
-function SettingsView() {
+function SettingsView({ rules }: { rules: DashboardSnapshot["gateRules"] }) {
   return (
     <section className="panel settings-panel" aria-label="Gate settings">
       <div className="panel__header">
@@ -362,7 +379,7 @@ function SettingsView() {
             </tr>
           </thead>
           <tbody>
-            {gateRules.map((rule) => (
+            {rules.map((rule) => (
               <tr key={rule.metric}>
                 <td>{rule.metric}</td>
                 <td>{rule.direction === "higher" ? "Higher is better" : "Lower is better"}</td>
@@ -380,14 +397,33 @@ function SettingsView() {
 }
 
 export function App() {
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot>(fallbackSnapshot);
   const [activeView, setActiveView] = useState<ViewId>("overview");
-  const [selectedRunId, setSelectedRunId] = useState(runs[0].id);
+  const [selectedRunId, setSelectedRunId] = useState(fallbackSnapshot.runs[0].id);
   const [selectedTraceIndex, setSelectedTraceIndex] = useState(0);
   const [failureFilter, setFailureFilter] = useState<FailureFilter>("all");
 
+  useEffect(() => {
+    let isMounted = true;
+
+    loadDashboardSnapshot().then((loadedSnapshot) => {
+      if (isMounted) {
+        setSnapshot({
+          ...fallbackSnapshot,
+          ...loadedSnapshot,
+          gateRules: loadedSnapshot.gateRules ?? fallbackSnapshot.gateRules,
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const selectedRun = useMemo(
-    () => runs.find((run) => run.id === selectedRunId) ?? runs[0],
-    [selectedRunId],
+    () => snapshot.runs.find((run) => run.id === selectedRunId) ?? snapshot.runs[0],
+    [selectedRunId, snapshot.runs],
   );
 
   function selectRun(runId: string) {
@@ -410,24 +446,25 @@ export function App() {
             <div>
               <h1>{activeView === "runs" ? "Run detail" : navItems.find((item) => item.id === activeView)?.label}</h1>
               <p>
-                {selectedRun.version} | {benchmarkSummary.benchmark}
+                {selectedRun.version} | {snapshot.benchmarkSummary.benchmark}
               </p>
             </div>
             <div className="page-title__right">
               <StatusPill status="fail" label="candidate failed" />
               <span>
                 <ClipboardCheck size={16} />
-                {benchmarkSummary.caseCount} cases
+                {snapshot.benchmarkSummary.caseCount} cases
               </span>
               <span>
                 <BarChart3 size={16} />
-                {formatCost(metrics[3].candidate)} mean cost
+                {formatCost(snapshot.metrics[3].candidate)} mean cost
               </span>
             </div>
           </div>
 
           {activeView === "overview" && (
             <OverviewView
+              snapshot={snapshot}
               selectedRunId={selectedRunId}
               onSelectRun={selectRun}
               selectedTraceIndex={selectedTraceIndex}
@@ -436,6 +473,7 @@ export function App() {
           )}
           {activeView === "runs" && (
             <RunDetailView
+              snapshot={snapshot}
               selectedRunId={selectedRunId}
               onSelectRun={selectRun}
               selectedTraceIndex={selectedTraceIndex}
@@ -444,16 +482,21 @@ export function App() {
           )}
           {activeView === "comparison" && (
             <ComparisonView
+              snapshot={snapshot}
               filter={failureFilter}
               onFilterChange={setFailureFilter}
               onSelectTrace={selectTrace}
             />
           )}
           {activeView === "traces" && (
-            <TracesView selectedTraceIndex={selectedTraceIndex} onSelectTraceIndex={setSelectedTraceIndex} />
+            <TracesView
+              traceCases={snapshot.traceCases}
+              selectedTraceIndex={selectedTraceIndex}
+              onSelectTraceIndex={setSelectedTraceIndex}
+            />
           )}
           {activeView === "calibration" && <CalibrationPanel signals={calibrationSignals} points={scatterPoints} />}
-          {activeView === "settings" && <SettingsView />}
+          {activeView === "settings" && <SettingsView rules={snapshot.gateRules} />}
         </main>
       </div>
     </div>

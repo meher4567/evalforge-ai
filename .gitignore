@@ -28,6 +28,7 @@ build/
 .playwright-cli/
 output/playwright/
 vite-dev*.log
+uvicorn-*.log
 
 # Docker / local data
 .docker/

@@ -28,6 +28,7 @@ The candidate is intentionally bad. It injects forbidden synthetic claims so the
 - run executor that stores outputs, traces, evaluator results, and run status
 - bootstrap confidence intervals for comparison metrics
 - gate verdicts across quality, latency, and cost
+- dashboard snapshot API at `GET /api/dashboard/demo`
 - React/Vite dashboard with overview, run detail, comparison, traces, calibration preview, and settings
 - backend and frontend tests
 - GitHub Actions CI workflow
@@ -199,4 +200,4 @@ I started EvalForge by building a reproducible backend foundation. FastAPI expos
 
 EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, persist traces and evaluator results, compute comparison metrics with confidence intervals, and show the result in a dashboard. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, and the trace inspector shows the retrieved context and exact reason.
 
-The next big upgrade is replacing the in-process executor with real Celery workers and completing the hand-labeled calibration study.
+The next big upgrade is replacing the in-process executor with real Celery workers, turning the dashboard snapshot into database aggregation, and completing the hand-labeled calibration study.

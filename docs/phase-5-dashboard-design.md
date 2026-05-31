@@ -109,7 +109,7 @@ The frontend lives under `frontend/src`.
 - `components/CalibrationPanel.tsx` renders the synthetic calibration preview.
 - `components/StatusPill.tsx` standardizes status visual language.
 - `lib/format.ts` centralizes metric formatting.
-- `api/client.ts` defines the future dashboard snapshot API boundary while falling back to local demo data.
+- `api/client.ts` loads `GET /api/dashboard/demo` and falls back to local demo data if the backend is unavailable.
 
 The app is deliberately componentized so it is explainable file by file. `App.tsx` owns orchestration; components own presentation; data is isolated.
 
@@ -175,8 +175,18 @@ Checked:
 - browser console has no app errors
 - favicon loads
 
+## Backend Boundary
+
+The dashboard now has a real backend boundary:
+
+```text
+GET /api/dashboard/demo
+```
+
+That endpoint returns benchmark-backed snapshot data with the same shape consumed by the React app. It is still a demo snapshot, not a live aggregation over arbitrary database runs. This is the correct halfway point because the UI contract is real while the next backend phase can replace the snapshot builder with database queries.
+
 ## Known Gaps
 
-The dashboard currently uses local benchmark-backed demo data. The `api/client.ts` boundary exists so the next phase can replace the local snapshot with a real `/api/dashboard/demo` endpoint without rewriting components.
-
 The final calibration study is not complete. That is documented honestly in the UI and in `docs/calibration_findings.md`.
+
+The dashboard endpoint is static demo aggregation. The next version should compute the latest comparison, failed cases, and traces directly from the database.
