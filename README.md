@@ -4,6 +4,14 @@ EvalForge AI is an evaluation and regression testing platform for RAG and LLM ap
 
 ![EvalForge dashboard](docs/design/phase-5-dashboard-render.png)
 
+## Honest Grade
+
+Current grade: **A- for a fresher portfolio project**.
+
+This is not a production SaaS and not senior-level MAANG infrastructure. It is, however, a strong fresher project because it solves a real AI engineering problem with a concrete backend, measured benchmark, trace storage, regression metrics, a dashboard, CI, and honest documentation.
+
+Read the full self-review in `docs/a-grade-review.md`.
+
 ## Current Demo Numbers
 
 Measured on the deterministic demo benchmark committed in `benchmarks/results/2026-05-31/demo_results.json`:
@@ -29,12 +37,23 @@ The candidate is intentionally bad. It injects forbidden synthetic claims so the
 - bootstrap confidence intervals for comparison metrics
 - gate verdicts across quality, latency, and cost
 - dashboard snapshot API at `GET /api/dashboard/demo`
+- database-backed latest dashboard API at `GET /api/dashboard/latest`
 - flaky-eval detection over repeated case scores
 - React/Vite dashboard with overview, run detail, comparison, traces, calibration preview, and settings
 - backend and frontend tests
 - GitHub Actions CI workflow
 
 See `docs/project-status.md` for the honest phase-by-phase status.
+
+## Documentation Map
+
+- `docs/a-grade-review.md`: honest grade, MAANG-level reality check, resume claims
+- `docs/architecture.md`: system architecture, domain model, data flow
+- `docs/api.md`: API reference with request examples
+- `docs/eval-metrics.md`: evaluator logic, bootstrap CIs, gates, flakiness
+- `docs/demo-walkthrough.md`: 90-second interview demo script
+- `docs/learning-roadmap.md`: file-by-file study path
+- `docs/interview-defense-guide.md`: questions and answer outlines
 
 ## Prerequisites
 
@@ -213,4 +232,4 @@ I started EvalForge by building a reproducible backend foundation. FastAPI expos
 
 EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, persist traces and evaluator results, compute comparison metrics with confidence intervals, and show the result in a dashboard. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, and the trace inspector shows the retrieved context and exact reason.
 
-The next big upgrade is replacing the in-process executor with real Celery workers, running flaky detection on real repeated adapter executions, turning the dashboard snapshot into database aggregation, and completing the hand-labeled calibration study.
+The next big upgrade is replacing the in-process executor with real Celery workers, running flaky detection on real repeated adapter executions, adding richer filters and drilldowns to the database-backed dashboard aggregation, and completing the hand-labeled calibration study.

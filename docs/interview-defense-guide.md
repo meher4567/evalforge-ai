@@ -34,7 +34,8 @@ Backend:
 - `backend/app/api/suites.py`: eval case import and suite summary APIs.
 - `backend/app/api/runs.py`: run execution and trace retrieval APIs.
 - `backend/app/api/comparisons.py`: comparison and gate decision APIs.
-- `backend/app/api/dashboard.py`: benchmark-backed dashboard snapshot API.
+- `backend/app/api/dashboard.py`: dashboard snapshot API.
+- `backend/app/services/dashboard_aggregation.py`: database-backed latest comparison snapshot.
 - `backend/app/adapters/demo_rag.py`: deterministic RAG-style demo adapter.
 - `backend/app/evaluators/`: evaluator contracts and implementations.
 - `backend/app/services/run_executor.py`: run execution orchestration.
@@ -146,7 +147,7 @@ The demo candidate intentionally injects forbidden synthetic claims. That makes 
 
 ### What is still missing?
 
-Real Celery workers, Docker runtime verification, real repeated-run flakiness over adapter executions, database-backed dashboard aggregation, final hand-labeled calibration findings, and demo video. The project documents these honestly.
+Real Celery workers, Docker runtime verification, real repeated-run flakiness over adapter executions, dashboard filters/pagination, final hand-labeled calibration findings, and demo video. The project documents these honestly.
 
 ## How To Study This Project
 

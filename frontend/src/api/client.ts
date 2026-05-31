@@ -11,8 +11,22 @@ export interface DashboardSnapshot {
 export async function loadDashboardSnapshot(
   apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "",
 ): Promise<DashboardSnapshot> {
+  const latest = await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/latest`);
+  if (latest) {
+    return latest;
+  }
+
+  const demo = await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/demo`);
+  if (demo) {
+    return demo;
+  }
+
+  return { benchmarkSummary, metrics, runs, traceCases, gateRules };
+}
+
+async function fetchDashboardSnapshot(url: string): Promise<DashboardSnapshot | null> {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/dashboard/demo`);
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Dashboard API returned ${response.status}`);
     }
@@ -21,6 +35,6 @@ export async function loadDashboardSnapshot(
     }
     return response.json() as Promise<DashboardSnapshot>;
   } catch {
-    return { benchmarkSummary, metrics, runs, traceCases, gateRules };
+    return null;
   }
 }

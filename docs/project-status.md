@@ -1,10 +1,10 @@
 # EvalForge AI Project Status
 
-This document is the honest phase-by-phase status. It separates what is working now from what still needs to be done before claiming an A-level resume project.
+This document is the honest phase-by-phase status. It separates what is working now from what still needs to be done before claiming an A/A+ resume project.
 
 ## Current Grade
 
-Current state: strong B+ prototype moving toward A-.
+Current state: **A- for a fresher portfolio project**.
 
 Why it is strong:
 
@@ -16,13 +16,14 @@ Why it is strong:
 - 500-case benchmark is measured and committed
 - flaky-eval detection benchmark is measured and committed
 - React dashboard is implemented, tested, and visually verified
+- latest dashboard endpoint aggregates persisted comparisons from the database
 - docs explain the architecture and phase decisions
 
-Why it is not yet A-:
+Why it is not yet A/A+:
 
 - Docker Compose was not runtime-verified on this machine because Docker is not installed
 - Celery worker execution is still represented by an in-process executor
-- dashboard uses a benchmark-backed demo API snapshot instead of live aggregation over arbitrary database runs
+- dashboard aggregation is real for latest comparison, but does not yet support filters or pagination
 - final hand-labeled calibration study is pending
 - demo video is not recorded
 
@@ -35,7 +36,7 @@ Why it is not yet A-:
 | Phase 2: Runner | Prototype complete | Deterministic in-process run executor with persisted run items, traces, and results |
 | Phase 3: Evaluators | Complete for MVP | exact match, keywords, semantic similarity, retrieval hit rate, forbidden claim, latency, cost |
 | Phase 4: Regression gates | Complete for MVP | comparison service, bootstrap CIs, gate rules, regression report |
-| Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, responsive screenshots, `GET /api/dashboard/demo` |
+| Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, responsive screenshots, `GET /api/dashboard/latest`, `GET /api/dashboard/demo` |
 | Phase 6: Advanced rigor | Partial | flaky-eval detection complete; calibration utilities and rubric exist; hand-labeling study still pending |
 | Operational polish | Partial | CI workflow added; Docker runtime and demo video pending |
 
@@ -43,15 +44,16 @@ Why it is not yet A-:
 
 ### 1. Database-backed dashboard aggregation
 
-Replace the benchmark-backed demo endpoint with a query-driven dashboard aggregation.
+Extend the query-driven dashboard aggregation.
 
 Current endpoint:
 
 ```text
+GET /api/dashboard/latest
 GET /api/dashboard/demo
 ```
 
-It already returns:
+The latest endpoint already returns:
 
 - benchmark summary
 - metrics
@@ -62,10 +64,10 @@ It already returns:
 
 Next improvement:
 
-- find the latest comparison from the database
-- join the baseline and candidate runs
-- compute failed cases from persisted evaluator results
-- return real traces from the trace table
+- add filters for app, suite, baseline run, and candidate run
+- paginate failed cases
+- expose per-tag metric breakdown
+- expose evaluator error counts
 
 ### 2. Celery worker path
 

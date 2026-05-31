@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { benchmarkSummary, metrics, runs, traceCases } from "./data/demo";
+import { benchmarkSummary, gateRules, metrics, runs, traceCases } from "./data/demo";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,6 +58,7 @@ describe("EvalForge dashboard", () => {
           metrics,
           runs,
           traceCases,
+          gateRules,
         }),
         {
           status: 200,
@@ -70,6 +71,6 @@ describe("EvalForge dashboard", () => {
     render(<App />);
 
     expect(await screen.findByText("321 cases")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/demo");
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/latest");
   });
 });
