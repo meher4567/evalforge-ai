@@ -1,1 +1,33 @@
 """API schema definitions."""
+
+from app.schemas.registry import (
+    AppCreate,
+    AppRead,
+    AppVersionCreate,
+    AppVersionRead,
+    EvalCaseImportItem,
+    EvalCaseImportRequest,
+    EvalCaseImportResult,
+    EvalCaseRead,
+    EvalSuiteCreate,
+    EvalSuiteRead,
+    EvalSuiteSummary,
+    EvaluatorConfigCreate,
+    EvaluatorConfigRead,
+)
+
+__all__ = [
+    "AppCreate",
+    "AppRead",
+    "AppVersionCreate",
+    "AppVersionRead",
+    "EvalCaseImportItem",
+    "EvalCaseImportRequest",
+    "EvalCaseImportResult",
+    "EvalCaseRead",
+    "EvalSuiteCreate",
+    "EvalSuiteRead",
+    "EvalSuiteSummary",
+    "EvaluatorConfigCreate",
+    "EvaluatorConfigRead",
+]
