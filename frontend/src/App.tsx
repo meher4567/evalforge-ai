@@ -74,7 +74,9 @@ function TopBar({
         <span>Branch: main</span>
       </div>
       <div className="topbar__actions">
-        {actionMessage && <span className="action-message">{actionMessage}</span>}
+        <span className="action-message" role="status" aria-live="polite" aria-atomic="true">
+          {actionMessage ?? ""}
+        </span>
         <button
           className="primary-action"
           type="button"
@@ -475,11 +477,11 @@ export function App() {
     setIsRunningEvaluation(true);
     setActionMessage(null);
     try {
-      const loadedSnapshot = await runDemoEvaluation();
+      const loadedSnapshot = await runDemoEvaluation({ onStatus: setActionMessage });
       applySnapshot(loadedSnapshot);
       setActionMessage("Evaluation complete");
-    } catch {
-      setActionMessage("Evaluation failed");
+    } catch (error) {
+      setActionMessage(`Evaluation failed: ${formatError(error)}`);
     } finally {
       setIsRunningEvaluation(false);
     }
@@ -555,4 +557,11 @@ export function App() {
       </div>
     </div>
   );
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Unexpected error";
 }

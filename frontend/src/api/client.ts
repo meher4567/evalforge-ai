@@ -18,6 +18,7 @@ interface RunDemoOptions {
   runLabel?: string;
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
+  onStatus?: (message: string) => void;
 }
 
 const demoCorpus = [
@@ -79,7 +80,9 @@ export async function runDemoEvaluation({
   runLabel = String(Date.now()),
   pollIntervalMs = 1000,
   pollTimeoutMs = 120000,
+  onStatus,
 }: RunDemoOptions = {}): Promise<DashboardSnapshot> {
+  onStatus?.("Creating evaluation project");
   const app = await postJson<{ id: string }>(`${apiBaseUrl}/api/apps`, {
     name: `demo-rag-ui-${runLabel}`,
     description: "Dashboard-launched RAG evaluation",
@@ -123,12 +126,14 @@ export async function runDemoEvaluation({
     },
   });
 
+  onStatus?.("Running baseline");
   const baselineRun = await waitForTerminalRun(
     await createRun(apiBaseUrl, baselineVersion.id, suite.id, evaluatorConfig.id),
     apiBaseUrl,
     pollIntervalMs,
     pollTimeoutMs,
   );
+  onStatus?.("Running candidate");
   const candidateRun = await waitForTerminalRun(
     await createRun(apiBaseUrl, candidateVersion.id, suite.id, evaluatorConfig.id),
     apiBaseUrl,
@@ -136,10 +141,12 @@ export async function runDemoEvaluation({
     pollTimeoutMs,
   );
 
+  onStatus?.("Computing comparison");
   await postJson(`${apiBaseUrl}/api/comparisons`, {
     baseline_run_id: baselineRun.id,
     candidate_run_id: candidateRun.id,
   });
+  onStatus?.("Refreshing dashboard");
   return loadDashboardSnapshot(apiBaseUrl);
 }
 

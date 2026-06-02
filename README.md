@@ -163,6 +163,7 @@ Frontend:
 ```powershell
 npm run lint --prefix frontend
 npm test --prefix frontend
+npm run test:e2e --prefix frontend
 npm run build --prefix frontend
 ```
 

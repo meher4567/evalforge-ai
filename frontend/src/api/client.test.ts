@@ -80,6 +80,7 @@ describe("loadDashboardSnapshot", () => {
 describe("runDemoEvaluation", () => {
   it("creates a fresh evaluation through the public API and reloads the dashboard", async () => {
     const latestSnapshot = snapshotWithCaseCount(2);
+    const statusUpdates: string[] = [];
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/apps") return apiResponse({ id: "app-1" }, 201);
       if (url === "/api/apps/app-1/versions") {
@@ -102,9 +103,19 @@ describe("runDemoEvaluation", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const snapshot = await runDemoEvaluation({ runLabel: "test-run" });
+    const snapshot = await runDemoEvaluation({
+      runLabel: "test-run",
+      onStatus: (message) => statusUpdates.push(message),
+    });
 
     expect(snapshot.benchmarkSummary.caseCount).toBe(2);
+    expect(statusUpdates).toEqual([
+      "Creating evaluation project",
+      "Running baseline",
+      "Running candidate",
+      "Computing comparison",
+      "Refreshing dashboard",
+    ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/apps",
       expect.objectContaining({ method: "POST" }),

@@ -27,6 +27,8 @@ build/
 *.tsbuildinfo
 .playwright-cli/
 output/playwright/
+frontend/playwright-report/
+frontend/test-results/
 vite-dev*.log
 uvicorn-*.log
 

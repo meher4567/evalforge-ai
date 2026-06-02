@@ -128,10 +128,43 @@ describe("EvalForge dashboard", () => {
     expect(await screen.findByText("2 cases")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
 
+    expect(screen.getByRole("status")).toHaveTextContent("Creating evaluation project");
     expect(await screen.findByText("3 cases")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Evaluation complete");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/apps",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("announces evaluation failures with the returned error message", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/dashboard/latest") {
+        return jsonResponse({
+          benchmarkSummary,
+          metrics,
+          runs,
+          traceCases,
+          gateRules,
+        });
+      }
+      if (url === "/api/apps") {
+        return new Response(JSON.stringify({ detail: "App name already exists" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByText("500 cases");
+    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Evaluation failed: API returned 409 for /api/apps",
     );
   });
 });
