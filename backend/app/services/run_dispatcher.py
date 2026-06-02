@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from celery import group
+from celery import chord, group
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,10 +105,9 @@ async def dispatch_run(
 
     # Dispatch all tasks as a Celery group with a completion callback
     if task_signatures:
-        job = group(task_signatures)
-        result = job.apply_async()
-        # Schedule completion check after the group finishes
-        result.link(check_run_completion.s(run_id=run.id))
+        # Use Celery chord: execute callback after all tasks in group complete
+        job = chord(task_signatures, check_run_completion.s(run_id=run.id))
+        job.apply_async()
         logger.info(
             "Dispatched %d eval tasks for run=%s",
             len(task_signatures),
