@@ -49,7 +49,7 @@ Why:
 
 - no paid API dependency
 - fast benchmark
-- easy for a fresher to explain
+- easy to explain and audit
 - stable results for CI
 
 Limitation:
@@ -149,4 +149,4 @@ The calibration study is the next major rigor step:
 3. Compare automated evaluator scores against human labels.
 4. Report Pearson, Spearman, confusion matrix, and one named finding.
 
-Until that is complete, calibration numbers should not be used on the resume.
+Until that is complete, calibration numbers should be treated as preliminary.

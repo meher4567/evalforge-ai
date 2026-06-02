@@ -29,4 +29,4 @@ Use this rubric for the hand-labeled gold set. Label the model answer, not the r
 
 ## Self-Agreement Check
 
-Relabel 10 cases at least 24 hours later. Compute weighted Cohen's kappa. If kappa is below 0.6, revise the rubric and relabel before using the findings in a resume or interview.
+Relabel 10 cases at least 24 hours later. Compute weighted Cohen's kappa. If kappa is below 0.6, revise the rubric and relabel before publishing calibration findings.

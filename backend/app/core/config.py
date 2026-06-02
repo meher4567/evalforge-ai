@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://evalforge:evalforge@localhost:5432/evalforge"
     redis_url: str = "redis://localhost:6379/0"
     health_check_timeout_seconds: float = 2.0
+    run_mode: str = "sync"
 
     model_config = SettingsConfigDict(
         env_file=".env",

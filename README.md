@@ -1,132 +1,59 @@
 # EvalForge AI
 
-EvalForge AI is an evaluation and regression testing platform for RAG and LLM applications. It compares a baseline app version against a candidate, runs an eval suite, stores per-case traces, scores outputs with multiple evaluators, and blocks regressions with quality, latency, and cost gates.
+EvalForge AI is an evaluation and regression testing platform for RAG and LLM applications. It compares a baseline app version against a candidate version, runs an evaluation suite, stores per-case traces, scores outputs with configurable evaluators, and reports quality, latency, and cost regressions.
 
 ![EvalForge dashboard](docs/design/phase-5-dashboard-render.png)
 
-## Honest Grade
+## Features
 
-Current grade: **A- for a fresher portfolio project**.
+- FastAPI backend for apps, versions, suites, cases, runs, traces, comparisons, and dashboard snapshots
+- React/Vite dashboard for run summaries, metric comparisons, traces, calibration preview, and settings
+- PostgreSQL persistence with Redis-backed Celery worker execution
+- Deterministic RAG demo adapter for repeatable local and CI evaluation
+- Evaluators for exact match, keyword coverage, semantic similarity, retrieval hit rate, forbidden claims, latency, and cost
+- Bootstrap confidence intervals and configurable gate rules for regression decisions
+- Flaky-eval classification over repeated case scores
+- Docker Compose stack with PostgreSQL, Redis, FastAPI, Celery worker, and nginx-served frontend
+- GitHub Actions workflows for strict CI and Docker/Celery smoke verification
 
-This is not a production SaaS and not senior-level MAANG infrastructure. It is, however, a strong fresher project because it solves a real AI engineering problem with a concrete backend, measured benchmark, trace storage, regression metrics, a dashboard, CI, and honest documentation.
+## Architecture
 
-Read the full self-review in `docs/a-grade-review.md`.
-
-## Current Demo Numbers
-
-Measured on the deterministic demo benchmark committed in `benchmarks/results/2026-05-31/demo_results.json`:
-
-- 500 eval cases
-- 1000 total case executions
-- 12.162 seconds elapsed
-- 4933.21 cases per minute
-- baseline pass rate: 100%
-- candidate pass rate: 0%
-- candidate semantic similarity: 0.284951
-- gate verdict: fail
-
-The candidate is intentionally bad. It injects forbidden synthetic claims so the platform visibly catches a regression.
-
-## What Is Implemented
-
-- FastAPI backend with app, version, suite, evaluator config, run, trace, and comparison APIs
-- SQLAlchemy domain model for registry, runs, traces, evaluator results, comparisons, and gold labels
-- deterministic RAG demo adapter
-- evaluator engine for exact match, keywords, semantic similarity, retrieval hit rate, forbidden claims, latency, and cost
-- run executor that stores outputs, traces, evaluator results, and run status
-- bootstrap confidence intervals for comparison metrics
-- gate verdicts across quality, latency, and cost
-- dashboard snapshot API at `GET /api/dashboard/demo`
-- database-backed latest dashboard API at `GET /api/dashboard/latest`
-- flaky-eval detection over repeated case scores
-- React/Vite dashboard with overview, run detail, comparison, traces, calibration preview, and settings
-- backend and frontend tests
-- GitHub Actions CI workflow
-
-See `docs/project-status.md` for the honest phase-by-phase status.
-
-## Documentation Map
-
-- `docs/a-grade-review.md`: honest grade, MAANG-level reality check, resume claims
-- `docs/architecture.md`: system architecture, domain model, data flow
-- `docs/api.md`: API reference with request examples
-- `docs/eval-metrics.md`: evaluator logic, bootstrap CIs, gates, flakiness
-- `docs/demo-walkthrough.md`: 90-second interview demo script
-- `docs/learning-roadmap.md`: file-by-file study path
-- `docs/interview-defense-guide.md`: questions and answer outlines
-
-## Prerequisites
-
-- Python 3.11+
-- `uv`
-- Node.js 22+
-- Docker Desktop, for the full local stack
-
-Install `uv` once if it is not already available:
-
-```powershell
-python -m pip install --user uv
+```text
+React dashboard
+      |
+      v
+FastAPI backend  ---> PostgreSQL
+      |
+      v
+Redis broker  ---> Celery worker
+      |
+      v
+App adapter + evaluator engine
 ```
 
-If PowerShell cannot find `uv` after installation, add this folder to your PATH:
+The backend can run evaluations synchronously for local development and through Celery workers for a production-like Docker path. The worker executes individual eval cases, stores traces and evaluator results, and updates run status when the Celery chord completes.
 
-```powershell
-python -m site --user-base
-```
+## Tech Stack
 
-On Windows, the `uv.exe` script is usually in the `Scripts` folder inside that user-base path.
+- Backend: FastAPI, SQLAlchemy, Pydantic, Celery, Redis, PostgreSQL/pgvector
+- Frontend: React, TypeScript, Vite, Vitest
+- Evaluation: deterministic RAG adapter, bootstrap statistics, regression gates
+- Infrastructure: Docker Compose, GitHub Actions
 
-## Local Backend Setup
+## Quick Start
 
-Install Python dependencies:
+Backend:
 
 ```powershell
 uv sync --directory backend
-```
-
-Run tests:
-
-```powershell
-uv run --directory backend pytest -v
-```
-
-Run linting:
-
-```powershell
-uv run --directory backend ruff check .
-```
-
-Run formatting check:
-
-```powershell
-uv run --directory backend ruff format --check .
-```
-
-Start the backend locally without Docker:
-
-```powershell
+uv run --directory backend pytest
 uv run --directory backend uvicorn app.main:app --reload
 ```
 
-When running the backend without PostgreSQL and Redis, `/healthz` should return `degraded`. That still proves the API is alive. The full Docker Compose stack should return `ok`.
-
-## Local Frontend Setup
-
-Install frontend dependencies:
+Frontend:
 
 ```powershell
 npm install --prefix frontend
-```
-
-Run frontend tests:
-
-```powershell
-npm test --prefix frontend
-```
-
-Run the frontend locally:
-
-```powershell
 npm run dev --prefix frontend
 ```
 
@@ -136,52 +63,68 @@ Open:
 http://127.0.0.1:5173
 ```
 
-Build the frontend:
+## Docker Compose
+
+Start the full stack:
 
 ```powershell
-npm run build --prefix frontend
+docker compose up --build
 ```
 
-## Benchmark Demo
-
-Run the deterministic 500-case benchmark:
+Check health:
 
 ```powershell
-uv run --directory backend python ../benchmarks/run_demo.py --cases 500
+curl http://localhost:8000/healthz
 ```
 
-The script writes a JSON result under:
-
-```text
-benchmarks/results/YYYY-MM-DD/demo_results.json
-```
-
-The committed reference result is:
-
-```text
-benchmarks/results/2026-05-31/demo_results.json
-```
-
-Run the deterministic flaky-eval benchmark:
+Seed demo data through Celery worker mode:
 
 ```powershell
-uv run --directory backend python ../benchmarks/flaky_eval.py
+docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
 ```
 
-The committed flaky-eval result is:
+Query the latest dashboard snapshot:
 
-```text
-benchmarks/results/2026-05-31/flaky_eval_results.json
+```powershell
+curl http://localhost:8000/api/dashboard/latest
 ```
 
-## Full Verification
+Stop and remove local volumes:
+
+```powershell
+docker compose down -v
+```
+
+## CLI Usage
+
+Seed a deterministic demo project in synchronous mode:
+
+```powershell
+uv run --directory backend python -m app.cli.seed --mode sync --cases 50
+```
+
+Run a baseline/candidate comparison:
+
+```powershell
+uv run --directory backend python -m app.cli.run `
+  --baseline-version <baseline_version_id> `
+  --candidate-version <candidate_version_id> `
+  --suite <suite_id> `
+  --evaluator-config <evaluator_config_id> `
+  --gate-rule <gate_rule_id> `
+  --sync
+```
+
+In Docker/Celery mode, omit `--sync` and let the CLI dispatch worker tasks and poll until the runs complete.
+
+## Verification
 
 Backend:
 
 ```powershell
-uv run --directory backend pytest
 uv run --directory backend ruff check .
 uv run --directory backend ruff format --check .
+uv run --directory backend pytest
 ```
 
 Frontend:
@@ -190,46 +133,27 @@ Frontend:
 npm run lint --prefix frontend
 npm test --prefix frontend
 npm run build --prefix frontend
-npm audit --prefix frontend
 ```
 
-## Docker Compose
-
-Start PostgreSQL, Redis, the backend, and the frontend:
+Docker/Celery smoke:
 
 ```powershell
-docker compose up --build
+docker compose up --build -d
+docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
+curl http://localhost:8000/api/dashboard/latest
+docker compose logs worker --tail 100
+docker compose down -v
 ```
 
-Check platform health:
+## Documentation
 
-```powershell
-Invoke-RestMethod http://localhost:8000/healthz
-```
+- [Architecture](docs/architecture.md)
+- [API reference](docs/api.md)
+- [Evaluation metrics](docs/eval-metrics.md)
+- [Calibration labeling rubric](docs/labeling_rubric.md)
 
-Expected healthy response:
+## Limitations
 
-```json
-{
-  "status": "ok",
-  "api": true,
-  "database": true,
-  "redis": true
-}
-```
-
-Open the frontend:
-
-```text
-http://localhost:5173
-```
-
-## Sprint 0 Interview Explanation
-
-I started EvalForge by building a reproducible backend foundation. FastAPI exposes the API, PostgreSQL stores future platform state, Redis supports future background jobs, and Docker Compose runs the stack locally. The first endpoint is `/healthz`, which checks that the API, database, and Redis are reachable before any evaluation features are added.
-
-## Interview Explanation Now
-
-EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, persist traces and evaluator results, compute comparison metrics with confidence intervals, and show the result in a dashboard. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, and the trace inspector shows the retrieved context and exact reason.
-
-The next big upgrade is replacing the in-process executor with real Celery workers, running flaky detection on real repeated adapter executions, adding richer filters and drilldowns to the database-backed dashboard aggregation, and completing the hand-labeled calibration study.
+- The default semantic similarity evaluator is deterministic and lightweight; it is not a replacement for a production embedding or judge model.
+- The included adapter and benchmark are deterministic demo assets, intended for reproducible testing.
+- Throughput claims should be measured against a live Docker/Celery stack before being reported.

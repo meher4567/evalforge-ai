@@ -69,10 +69,10 @@ jobs:
           if echo "$DASHBOARD" | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
-          assert 'gate_verdict' in data, 'Missing gate_verdict'
-          assert 'metrics' in data, 'Missing metrics'
-          assert data.get('gate_verdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gate_verdict: {data.get('gate_verdict')}\"
-          print('Dashboard assertions passed: gateway_verdict=' + str(data.get('gate_verdict')))
+          summary = data.get('benchmarkSummary') or {}
+          assert summary.get('gateVerdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
+          assert isinstance(data.get('metrics'), list) and data['metrics'], 'Missing metrics'
+          print('Dashboard assertions passed: gateVerdict=' + str(summary.get('gateVerdict')))
           "; then
             echo "Dashboard data is valid"
           else

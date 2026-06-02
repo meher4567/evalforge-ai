@@ -8,9 +8,11 @@ def test_settings_read_evalforge_environment_variables(monkeypatch):
         "postgresql+asyncpg://user:pass@db:5432/example",
     )
     monkeypatch.setenv("EVALFORGE_REDIS_URL", "redis://redis:6379/1")
+    monkeypatch.setenv("EVALFORGE_RUN_MODE", "celery")
 
     settings = Settings()
 
     assert settings.environment == "test"
     assert settings.database_url == "postgresql+asyncpg://user:pass@db:5432/example"
     assert settings.redis_url == "redis://redis:6379/1"
+    assert settings.run_mode == "celery"
