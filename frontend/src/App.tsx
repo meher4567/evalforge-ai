@@ -8,12 +8,13 @@ import {
   GitCompare,
   HelpCircle,
   LayoutDashboard,
+  Play,
   RefreshCcw,
   Route,
   Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { loadDashboardSnapshot, type DashboardSnapshot } from "./api/client";
+import { loadDashboardSnapshot, runDemoEvaluation, type DashboardSnapshot } from "./api/client";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { ComparisonBars } from "./components/ComparisonBars";
 import { MetricCard } from "./components/MetricCard";
@@ -54,7 +55,17 @@ const filters = ["all", "semantic_similarity", "contains_keywords", "forbidden_c
 
 type FailureFilter = (typeof filters)[number];
 
-function TopBar() {
+function TopBar({
+  isRunningEvaluation,
+  actionMessage,
+  onRefresh,
+  onRunEvaluation,
+}: {
+  isRunningEvaluation: boolean;
+  actionMessage: string | null;
+  onRefresh: () => void;
+  onRunEvaluation: () => void;
+}) {
   return (
     <header className="topbar">
       <div className="topbar__selects" aria-label="Workspace filters">
@@ -63,8 +74,18 @@ function TopBar() {
         <span>Branch: main</span>
       </div>
       <div className="topbar__actions">
+        {actionMessage && <span className="action-message">{actionMessage}</span>}
+        <button
+          className="primary-action"
+          type="button"
+          disabled={isRunningEvaluation}
+          onClick={onRunEvaluation}
+        >
+          <Play size={16} />
+          {isRunningEvaluation ? "Running..." : "Run evaluation"}
+        </button>
         <span className="date-chip">May 31, 2026</span>
-        <button className="icon-button" type="button" aria-label="Refresh dashboard">
+        <button className="icon-button" type="button" aria-label="Refresh dashboard" onClick={onRefresh}>
           <RefreshCcw size={16} />
         </button>
       </div>
@@ -402,17 +423,15 @@ export function App() {
   const [selectedRunId, setSelectedRunId] = useState(fallbackSnapshot.runs[0].id);
   const [selectedTraceIndex, setSelectedTraceIndex] = useState(0);
   const [failureFilter, setFailureFilter] = useState<FailureFilter>("all");
+  const [isRunningEvaluation, setIsRunningEvaluation] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     loadDashboardSnapshot().then((loadedSnapshot) => {
       if (isMounted) {
-        setSnapshot({
-          ...fallbackSnapshot,
-          ...loadedSnapshot,
-          gateRules: loadedSnapshot.gateRules ?? fallbackSnapshot.gateRules,
-        });
+        applySnapshot(loadedSnapshot);
       }
     });
 
@@ -436,11 +455,46 @@ export function App() {
     setActiveView("traces");
   }
 
+  function applySnapshot(loadedSnapshot: DashboardSnapshot) {
+    const nextSnapshot = {
+      ...fallbackSnapshot,
+      ...loadedSnapshot,
+      gateRules: loadedSnapshot.gateRules ?? fallbackSnapshot.gateRules,
+    };
+    setSnapshot(nextSnapshot);
+    setSelectedRunId(nextSnapshot.runs[0]?.id ?? fallbackSnapshot.runs[0].id);
+    setSelectedTraceIndex(0);
+  }
+
+  async function refreshDashboard() {
+    const loadedSnapshot = await loadDashboardSnapshot();
+    applySnapshot(loadedSnapshot);
+  }
+
+  async function launchEvaluation() {
+    setIsRunningEvaluation(true);
+    setActionMessage(null);
+    try {
+      const loadedSnapshot = await runDemoEvaluation();
+      applySnapshot(loadedSnapshot);
+      setActionMessage("Evaluation complete");
+    } catch {
+      setActionMessage("Evaluation failed");
+    } finally {
+      setIsRunningEvaluation(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
       <div className="workspace">
-        <TopBar />
+        <TopBar
+          isRunningEvaluation={isRunningEvaluation}
+          actionMessage={actionMessage}
+          onRefresh={refreshDashboard}
+          onRunEvaluation={launchEvaluation}
+        />
         <main className="workspace-main">
           <div className="page-title">
             <div>

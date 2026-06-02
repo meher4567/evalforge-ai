@@ -10,6 +10,7 @@ EvalForge AI is an evaluation and regression testing platform for RAG and LLM ap
 - React/Vite dashboard for run summaries, metric comparisons, traces, calibration preview, and settings
 - PostgreSQL persistence with Redis-backed Celery worker execution
 - Deterministic RAG demo adapter for repeatable local and CI evaluation
+- Configurable RAG adapter for Ollama or OpenAI-compatible chat completion providers
 - Evaluators for exact match, keyword coverage, semantic similarity, retrieval hit rate, forbidden claims, latency, and cost
 - Bootstrap confidence intervals and configurable gate rules for regression decisions
 - Flaky-eval classification over repeated case scores
@@ -32,6 +33,10 @@ App adapter + evaluator engine
 ```
 
 The backend can run evaluations synchronously for local development and through Celery workers for a production-like Docker path. The worker executes individual eval cases, stores traces and evaluator results, and updates run status when the Celery chord completes.
+
+The dashboard can launch a small evaluation through the public API. It creates an app, versions,
+suite, cases, evaluator config, runs both versions, waits for completion, computes the comparison,
+and refreshes the latest dashboard snapshot.
 
 ## Tech Stack
 
@@ -88,6 +93,32 @@ Query the latest dashboard snapshot:
 ```powershell
 curl http://localhost:8000/api/dashboard/latest
 ```
+
+Run against a local Ollama model by creating an app version with `adapter_module` set to
+`app.adapters.llm_rag`:
+
+```json
+{
+  "name": "ollama-baseline",
+  "adapter_module": "app.adapters.llm_rag",
+  "config": {
+    "provider": "ollama",
+    "base_url": "http://host.docker.internal:11434",
+    "model": "llama3.2:3b",
+    "top_k": 3,
+    "corpus": [
+      {
+        "doc_id": "python-venv",
+        "text": "The venv module creates lightweight Python virtual environments."
+      }
+    ]
+  }
+}
+```
+
+For Groq, OpenAI, or another OpenAI-compatible endpoint, use
+`provider: "openai_compatible"` and set `api_key_env` to the environment variable that holds the
+API key.
 
 Stop and remove local volumes:
 
