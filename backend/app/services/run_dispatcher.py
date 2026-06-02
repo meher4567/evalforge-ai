@@ -23,6 +23,7 @@ from app.models import (
     EvalSuiteCase,
     EvaluatorConfig,
 )
+from app.workers.celery_app import celery_app  # noqa: F401 — register Celery app before task imports
 from app.workers.tasks import check_run_completion, run_eval_case
 
 logger = logging.getLogger("evalforge.run_dispatcher")
