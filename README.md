@@ -145,6 +145,18 @@ docker compose logs worker --tail 100
 docker compose down -v
 ```
 
+Measured worker throughput:
+
+```powershell
+python benchmarks/worker_throughput.py --cases 50 --worker-concurrency 4
+```
+
+The current Docker/Celery smoke benchmark is recorded in
+[benchmarks/results/2026-06-03/worker_throughput.json](benchmarks/results/2026-06-03/worker_throughput.json).
+On a local Docker Desktop run, the worker path completed 50 baseline cases and 50 candidate
+cases with concurrency 4 in 2.017 seconds, or 2,974.71 case executions per minute. This is a
+deterministic demo workload measurement, not a production throughput claim.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -156,4 +168,4 @@ docker compose down -v
 
 - The default semantic similarity evaluator is deterministic and lightweight; it is not a replacement for a production embedding or judge model.
 - The included adapter and benchmark are deterministic demo assets, intended for reproducible testing.
-- Throughput claims should be measured against a live Docker/Celery stack before being reported.
+- The committed throughput artifact measures the Docker/Celery smoke path only. Production capacity depends on model latency, worker sizing, and deployment hardware.

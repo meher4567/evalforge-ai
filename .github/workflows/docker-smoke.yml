@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "benchmarks/worker_throughput.py"
       - "docker-compose.yml"
       - ".github/workflows/docker-smoke.yml"
 
@@ -95,6 +96,24 @@ jobs:
             exit 1
           fi
           echo "Celery worker successfully processed tasks"
+
+      - name: Capture worker throughput artifact
+        run: |
+          python3 benchmarks/worker_throughput.py \
+            --cases 50 \
+            --worker-concurrency 4 \
+            --environment github_actions_docker \
+            --source github_actions_docker_smoke \
+            --skip-seed \
+            --output-dir /tmp/evalforge-worker-throughput
+          echo "=== Worker throughput artifact ==="
+          cat /tmp/evalforge-worker-throughput/worker_throughput.json | python3 -m json.tool
+
+      - name: Upload worker throughput artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-throughput
+          path: /tmp/evalforge-worker-throughput/worker_throughput.json
 
       - name: Diagnostics (success or failure)
         if: always()

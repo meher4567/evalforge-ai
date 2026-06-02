@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-06-02T19:50:28.100175+00:00",
+  "benchmark": "docker_celery_worker_throughput",
+  "execution_mode": "celery",
+  "environment": "local_docker_desktop",
+  "source": "docker_compose_seed",
+  "case_count": 50,
+  "total_executions": 100,
+  "worker_concurrency": 4,
+  "elapsed_seconds": 2.017,
+  "cases_per_minute": 2974.71,
+  "gate_verdict": "fail",
+  "metrics": {
+    "pass_rate": {
+      "baseline": 1.0,
+      "candidate": 0.0,
+      "delta": -1.0,
+      "status": "fail"
+    },
+    "semantic_similarity": {
+      "baseline": 1.0,
+      "candidate": 0.284951,
+      "delta": -0.715049,
+      "status": "fail"
+    },
+    "p95_latency_ms": {
+      "baseline": 120.0,
+      "candidate": 260.0,
+      "delta": 140.0,
+      "status": "fail"
+    },
+    "cost_mean_usd": {
+      "baseline": 6e-06,
+      "candidate": 7e-06,
+      "delta": 1e-06,
+      "status": "pass"
+    }
+  },
+  "reproduction_commands": [
+    "docker compose up --build -d",
+    "docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50",
+    "curl http://localhost:8000/api/dashboard/latest",
+    "docker compose logs worker --tail 100"
+  ],
+  "limitations": [
+    "Measured with the deterministic demo adapter, not an external LLM provider.",
+    "Local Docker throughput is a smoke benchmark, not a production capacity claim.",
+    "The rate includes eval pipeline overhead for this seeded workload."
+  ]
+}
