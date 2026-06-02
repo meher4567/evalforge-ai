@@ -6,10 +6,19 @@ requires-python = ">=3.11"
 dependencies = [
     "aiosqlite>=0.20.0",
     "asyncpg>=0.29.0",
+    "celery>=5.4.0",
     "fastapi>=0.115.0",
+    "numpy>=1.26.0",
+    "pgvector>=0.3.6",
+    "psycopg2-binary>=2.9.10",
     "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.0",
     "redis>=5.0.8",
+    "scipy>=1.11.0",
+    "sentence-transformers>=3.0.0",
     "sqlalchemy[asyncio]>=2.0.35",
+    "tiktoken>=0.7.0",
+    "transformers>=4.40.0",
     "uvicorn[standard]>=0.30.6",
 ]
 
