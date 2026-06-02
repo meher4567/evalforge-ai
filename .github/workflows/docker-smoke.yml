@@ -1,0 +1,113 @@
+name: EvalForge Docker + Celery Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-smoke.yml"
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start services
+        run: docker compose up --build -d
+
+      - name: Wait for backend healthy
+        run: |
+          HEALTHY=0
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/healthz || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Backend healthy (HTTP $STATUS)"
+              HEALTHY=1
+              break
+            fi
+            echo "Waiting for backend... attempt $i/60 (HTTP $STATUS)"
+            sleep 5
+          done
+          if [ "$HEALTHY" != "1" ]; then
+            echo "ERROR: Backend never became healthy"
+            docker compose logs backend --tail 50
+            exit 1
+          fi
+          echo "=== Health check response ==="
+          curl -s http://localhost:8000/healthz | python3 -m json.tool
+
+      - name: Seed demo data via Celery worker
+        id: seed
+        run: |
+          echo "=== Running seed in Celery mode ==="
+          docker compose exec -T backend uv run python -m app.cli.seed --mode celery --cases 50 2>&1 | tee /tmp/seed.log
+          echo "=== Seed output ==="
+          cat /tmp/seed.log
+          # Verify seed completed successfully by checking for summary in output
+          if ! grep -q '"case_count"' /tmp/seed.log; then
+            echo "ERROR: Seed did not complete successfully (no summary found)"
+            exit 1
+          fi
+          if ! grep -q '"run_mode": "celery"' /tmp/seed.log; then
+            echo "ERROR: Seed did not use Celery mode"
+            exit 1
+          fi
+
+      - name: Check dashboard latest
+        id: dashboard
+        run: |
+          echo "=== Dashboard latest response ==="
+          DASHBOARD=$(curl -s http://localhost:8000/api/dashboard/latest)
+          echo "$DASHBOARD" | python3 -m json.tool
+          # Hard assertions: dashboard must return valid data
+          if echo "$DASHBOARD" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          assert 'gate_verdict' in data, 'Missing gate_verdict'
+          assert 'metrics' in data, 'Missing metrics'
+          assert data.get('gate_verdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gate_verdict: {data.get('gate_verdict')}\"
+          print('Dashboard assertions passed: gateway_verdict=' + str(data.get('gate_verdict')))
+          "; then
+            echo "Dashboard data is valid"
+          else
+            echo "ERROR: Dashboard returned invalid or empty data"
+            exit 1
+          fi
+
+      - name: Verify Celery worker processed tasks
+        run: |
+          echo "=== Checking worker task execution ==="
+          WORKER_LOGS=$(docker compose logs worker --tail 200)
+          echo "$WORKER_LOGS"
+          # Assert Celery worker received and executed tasks
+          if ! echo "$WORKER_LOGS" | grep -q "Task evalforge.eval_case"; then
+            echo "ERROR: Celery worker never received any eval_case tasks"
+            exit 1
+          fi
+          if ! echo "$WORKER_LOGS" | grep -q "Task evalforge.check_run_completion"; then
+            echo "ERROR: Celery worker never ran check_run_completion"
+            exit 1
+          fi
+          echo "Celery worker successfully processed tasks"
+
+      - name: Diagnostics (success or failure)
+        if: always()
+        run: |
+          echo "=== Docker Compose PS ==="
+          docker compose ps || true
+          echo ""
+          echo "=== Backend logs (last 100 lines) ==="
+          docker compose logs backend --tail 100 || true
+          echo ""
+          echo "=== Worker logs (last 100 lines) ==="
+          docker compose logs worker --tail 100 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
