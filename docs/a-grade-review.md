@@ -18,6 +18,7 @@ EvalForge is not a production SaaS and should not be described as MAANG-grade in
 - Docker Compose-verified Celery smoke: 50-case baseline and 50-case candidate runs completed through the worker path.
 - Alembic baseline migration for the database schema.
 - Optional API-key protection for all `/api/*` routes.
+- CI/CD gate report endpoint and CLI that emit JSON/Markdown artifacts and non-zero exit codes for failed candidates.
 - React dashboard with trace inspection, database-backed comparison data, failed-case pagination, and per-tag quality breakdowns.
 - Backend/frontend tests and CI workflows.
 
@@ -49,7 +50,7 @@ Use this:
 
 Safe today:
 
-> Built EvalForge AI, a FastAPI and React evaluation platform for RAG/LLM regression testing with persisted traces, Groq-backed real-model smoke tests, token and embedding evaluators, Alembic migrations, Docker-verified Celery worker execution, and bootstrap-CI quality/latency/cost gates.
+> Built EvalForge AI, a FastAPI and React evaluation platform for RAG/LLM regression testing with persisted traces, Groq-backed real-model smoke tests, token and embedding evaluators, Alembic migrations, Docker-verified Celery worker execution, CI/CD JSON/Markdown gate reports, and bootstrap-CI quality/latency/cost gates.
 
 > Implemented evaluator infrastructure for exact match, keyword coverage, token F1 overlap, embedding similarity, retrieval hit rate, forbidden-claim detection, latency/cost thresholds, and flaky-eval classification over repeated case scores.
 

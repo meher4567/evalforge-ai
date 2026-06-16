@@ -221,3 +221,52 @@ async def test_comparison_detects_bad_candidate_regression(client: AsyncClient):
     gate_response = await client.get(f"/api/comparisons/{comparison['id']}/gate-decision")
     assert gate_response.status_code == 200
     assert gate_response.json()["verdict"] == "fail"
+
+
+@pytest.mark.anyio
+async def test_comparison_ci_report_returns_markdown_gate_artifact(client: AsyncClient):
+    ids = await seed_rag_project(client)
+
+    baseline_run = (
+        await client.post(
+            "/api/runs",
+            json={
+                "app_version_id": ids["baseline_version_id"],
+                "suite_id": ids["suite_id"],
+                "evaluator_config_id": ids["evaluator_config_id"],
+            },
+        )
+    ).json()
+    candidate_run = (
+        await client.post(
+            "/api/runs",
+            json={
+                "app_version_id": ids["candidate_version_id"],
+                "suite_id": ids["suite_id"],
+                "evaluator_config_id": ids["evaluator_config_id"],
+            },
+        )
+    ).json()
+    comparison = (
+        await client.post(
+            "/api/comparisons",
+            json={
+                "baseline_run_id": baseline_run["id"],
+                "candidate_run_id": candidate_run["id"],
+            },
+        )
+    ).json()
+
+    response = await client.get(
+        f"/api/comparisons/{comparison['id']}/ci-report",
+        params={"dashboard_url": "http://localhost:5173"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["comparison_id"] == comparison["id"]
+    assert payload["verdict"] == "fail"
+    assert payload["should_fail_ci"] is True
+    assert payload["metrics"][0]["name"] == "pass_rate"
+    assert "EvalForge Deployment Gate" in payload["markdown"]
+    assert "http://localhost:5173" in payload["markdown"]

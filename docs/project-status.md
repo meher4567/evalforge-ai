@@ -21,6 +21,7 @@ Why it is strong:
 - Celery worker service exists in Docker Compose
 - Docker Compose runtime was verified locally on June 16, 2026 with PostgreSQL, Redis, FastAPI, Celery worker, and frontend
 - Celery seed smoke completed 50/50 baseline cases and 50/50 candidate cases, then computed the comparison gate
+- CI/CD gate report endpoint and CLI produce JSON/Markdown artifacts and deterministic blocking exit codes
 - React dashboard is implemented, tested, and visually verified
 - latest dashboard endpoint aggregates persisted comparisons from the database
 - latest dashboard endpoint supports explicit comparison selection, failed-case pagination, and per-tag quality breakdowns
@@ -44,7 +45,7 @@ Why it is not yet A+:
 | Phase 4: Regression gates | Complete for MVP | comparison service, bootstrap CIs, gate rules, regression report |
 | Phase 5: Dashboard | Complete as demo UI | React/Vite dashboard, trace inspector, comparison filters, tag breakdowns, failed-case pagination, `GET /api/dashboard/latest`, `GET /api/dashboard/demo` |
 | Phase 6: Advanced rigor | Partial | flaky-eval detection complete; calibration utilities and rubric exist; hand-labeling study still pending |
-| Operational polish | Partial | CI workflow added; Docker runtime verified locally; multi-worker throughput, CI Docker smoke, and demo video pending |
+| Operational polish | Partial | CI gate report CLI/API added; Docker runtime verified locally; multi-worker throughput, CI Docker smoke, and demo video pending |
 
 ## What To Finish Next
 
@@ -141,11 +142,30 @@ Record a short demo:
 
 Keep it under 90 seconds.
 
+### 7. Production CI integration
+
+The practical deploy gate path is now:
+
+```powershell
+uv run --directory backend python -m app.cli.gate `
+  --base-url http://localhost:8000 `
+  --comparison-id <comparison-id> `
+  --dashboard-url http://localhost:5173 `
+  --json-out gate-report.json `
+  --markdown-out gate-report.md
+```
+
+This command exits `1` on `fail` and can be wired to GitHub Actions, CircleCI, or a release pipeline. The remaining production proof is a hosted EvalForge service plus CI logs from a real application repository.
+
 ## Resume Readiness
 
 Safe resume bullet today:
 
 > Built EvalForge AI, a FastAPI and React evaluation platform for RAG/LLM regression testing with persisted traces, Groq-backed real-model smoke tests, token and embedding evaluators, Alembic migrations, Celery worker dispatch, and bootstrap-CI quality/latency/cost gates.
+
+Stronger version after the CI gate report work:
+
+> Built EvalForge AI, a FastAPI and React evaluation platform for RAG/LLM regression testing with persisted traces, Groq-backed smoke tests, token and embedding evaluators, Alembic migrations, Docker-verified Celery workers, and CI/CD gate reports that emit JSON/Markdown artifacts and block failed candidates.
 
 Do not yet claim:
 

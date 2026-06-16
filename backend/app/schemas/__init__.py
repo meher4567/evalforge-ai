@@ -1,6 +1,7 @@
 """API schema definitions."""
 
 from app.schemas.execution import (
+    CIGateReportRead,
     ComparisonCreate,
     ComparisonRead,
     EvalResultRead,
@@ -41,6 +42,7 @@ __all__ = [
     "EvalSuiteSummary",
     "EvaluatorConfigCreate",
     "EvaluatorConfigRead",
+    "CIGateReportRead",
     "ComparisonCreate",
     "ComparisonRead",
     "EvalResultRead",

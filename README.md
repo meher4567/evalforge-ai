@@ -48,6 +48,7 @@ Docker/Celery smoke verified on June 16, 2026:
 - optional API-key protection for all data APIs
 - bootstrap confidence intervals for comparison metrics
 - gate verdicts across quality, latency, and cost
+- CI/CD deployment gate report API and CLI for JSON/Markdown artifacts
 - dashboard snapshot API at `GET /api/dashboard/demo`
 - database-backed latest dashboard API at `GET /api/dashboard/latest`
 - dashboard comparison selection, failed-case pagination, and per-tag quality breakdowns
@@ -290,12 +291,27 @@ docker compose exec -T backend uv run python -m app.cli.seed --mode celery --cas
 
 Expected result: both baseline and candidate runs finish with `completed=50 errored=0`, then the comparison gate fails the intentionally degraded candidate.
 
+## CI/CD Gate Report
+
+After a comparison is computed, CI can fetch a deployment gate artifact and fail the pipeline when the candidate regresses:
+
+```powershell
+uv run --directory backend python -m app.cli.gate `
+  --base-url http://localhost:8000 `
+  --comparison-id <comparison-id> `
+  --dashboard-url http://localhost:5173 `
+  --json-out gate-report.json `
+  --markdown-out gate-report.md
+```
+
+The command exits `1` when the gate verdict is `fail`, writes machine-readable JSON, and writes a Markdown summary suitable for a GitHub step summary or PR comment. Add `--fail-on-warn` when warning verdicts should block deploys too.
+
 ## Sprint 0 Interview Explanation
 
 I started EvalForge by building a reproducible backend foundation. FastAPI exposes the API, PostgreSQL stores future platform state, Redis supports future background jobs, and Docker Compose runs the stack locally. The first endpoint is `/healthz`, which checks that the API, database, and Redis are reachable before any evaluation features are added.
 
 ## Interview Explanation Now
 
-EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, call a real Groq model through an adapter, persist traces and evaluator results, compute comparison metrics with confidence intervals, protect APIs with an optional key, migrate the schema with Alembic, execute the worker path through Docker Compose and Celery, and show the result in a dashboard with failed-case pagination and per-tag breakdowns. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, and the trace inspector shows the retrieved context and exact reason.
+EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, call a real Groq model through an adapter, persist traces and evaluator results, compute comparison metrics with confidence intervals, protect APIs with an optional key, migrate the schema with Alembic, execute the worker path through Docker Compose and Celery, emit a CI/CD deployment gate artifact, and show the result in a dashboard with failed-case pagination and per-tag breakdowns. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, the CI report can block deployment, and the trace inspector shows the retrieved context and exact reason.
 
 The next big upgrade is scale proof: capture worker throughput with multiple concurrency levels, add app/suite/run dashboard filters, add repeatable CI smoke logs for Docker, and complete the hand-labeled calibration study.

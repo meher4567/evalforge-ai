@@ -195,6 +195,58 @@ Returns:
 }
 ```
 
+### `GET /api/comparisons/{comparison_id}/ci-report`
+
+Returns a CI/CD-ready deployment gate artifact. It includes the gate verdict, a boolean `should_fail_ci`, metric rows, raw gate reasons, and a Markdown report that can be written to a GitHub step summary or PR comment.
+
+Optional query parameters:
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `dashboard_url` | `null` | Link appended to the Markdown report |
+| `fail_on_warn` | `false` | Treat `warn` verdicts as CI failures |
+
+Example response:
+
+```json
+{
+  "comparison_id": "uuid",
+  "baseline_run_id": "uuid",
+  "candidate_run_id": "uuid",
+  "verdict": "fail",
+  "should_fail_ci": true,
+  "dashboard_url": "http://localhost:5173",
+  "generated_at": "2026-06-16T00:00:00+00:00",
+  "metrics": [
+    {
+      "name": "pass_rate",
+      "baseline": 1.0,
+      "candidate": 0.82,
+      "delta": -0.18,
+      "delta_ci": [-0.22, -0.11],
+      "status": "fail"
+    }
+  ],
+  "gate_reasons": [
+    {
+      "metric": "pass_rate",
+      "verdict": "fail"
+    }
+  ],
+  "markdown": "## EvalForge Deployment Gate\n\nGate verdict: `fail`\n"
+}
+```
+
+CLI usage:
+
+```powershell
+uv run --directory backend python -m app.cli.gate `
+  --base-url http://localhost:8000 `
+  --comparison-id <comparison-id> `
+  --json-out gate-report.json `
+  --markdown-out gate-report.md
+```
+
 ## Dashboard
 
 ### `GET /api/dashboard/latest`

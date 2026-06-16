@@ -1,16 +1,14 @@
-# Example: How EvalForge could block a bad RAG/prompt change in CI/CD
+# Example: How EvalForge blocks a bad RAG or prompt change in CI/CD
 #
-# This workflow demonstrates the pattern. In a real setup you would:
-# 1. Host EvalForge as a service (or run docker compose in CI)
-# 2. Seed eval suites per project
-# 3. Run baseline + candidate evaluations
-# 4. Fail the CI pipeline if the gate verdict is "fail"
+# This workflow demonstrates the production integration pattern. In a real setup:
+# 1. Host EvalForge as a service or run Docker Compose in CI.
+# 2. Seed eval suites per project.
+# 3. Run baseline and candidate evaluations.
+# 4. Create a comparison.
+# 5. Use the CI gate CLI to write JSON/Markdown artifacts and fail on regressions.
 #
-# This file is an EXAMPLE. It assumes EvalForge is running at
-# http://evalforge.internal:8000 and has been pre-seeded with
-# the project's eval suite.
-#
-# Not intended to pass in open-source CI. Use as a reference.
+# This file is an example. It assumes EvalForge is running at
+# http://evalforge.internal:8000 and has been pre-seeded with the project eval suite.
 
 name: EvalForge Regression Gate (Example)
 
@@ -28,6 +26,8 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Trigger baseline eval
         id: baseline
         run: |
@@ -38,7 +38,7 @@ jobs:
               "suite_id": "${{ vars.EVALFORGE_SUITE_ID }}",
               "evaluator_config_id": "${{ vars.EVALFORGE_EVALUATOR_CONFIG_ID }}"
             }')
-          echo "run_id=$(echo $RESPONSE | jq -r .id)" >> $GITHUB_OUTPUT
+          echo "run_id=$(echo "$RESPONSE" | jq -r .id)" >> "$GITHUB_OUTPUT"
 
       - name: Trigger candidate eval
         id: candidate
@@ -46,11 +46,11 @@ jobs:
           RESPONSE=$(curl -s -X POST http://evalforge.internal:8000/api/runs \
             -H "Content-Type: application/json" \
             -d '{
-              "app_version_id": "${{ github.event.pull_request.head.sha }}",
+              "app_version_id": "${{ vars.EVALFORGE_CANDIDATE_VERSION_ID }}",
               "suite_id": "${{ vars.EVALFORGE_SUITE_ID }}",
               "evaluator_config_id": "${{ vars.EVALFORGE_EVALUATOR_CONFIG_ID }}"
             }')
-          echo "run_id=$(echo $RESPONSE | jq -r .id)" >> $GITHUB_OUTPUT
+          echo "run_id=$(echo "$RESPONSE" | jq -r .id)" >> "$GITHUB_OUTPUT"
 
       - name: Wait for completion
         run: |
@@ -61,7 +61,7 @@ jobs:
               echo "Both runs completed"
               break
             fi
-            echo "Waiting... ($i/60)"
+            echo "Waiting for EvalForge runs... ($i/60)"
             sleep 10
           done
 
@@ -75,33 +75,22 @@ jobs:
               "candidate_run_id": "${{ steps.candidate.outputs.run_id }}",
               "gate_rules_id": "${{ vars.EVALFORGE_GATE_RULES_ID }}"
             }')
-          echo "comparison_id=$(echo $RESPONSE | jq -r .id)" >> $GITHUB_OUTPUT
+          echo "comparison_id=$(echo "$RESPONSE" | jq -r .id)" >> "$GITHUB_OUTPUT"
 
-      - name: Check gate verdict
+      - name: Check EvalForge deployment gate
         id: gate
         run: |
-          VERDICT=$(curl -s http://evalforge.internal:8000/api/comparisons/${{ steps.comparison.outputs.comparison_id }}/gate-decision | jq -r .verdict)
-          echo "verdict=$VERDICT" >> $GITHUB_OUTPUT
+          python -m pip install uv
+          uv run --directory backend python -m app.cli.gate \
+            --base-url http://evalforge.internal:8000 \
+            --comparison-id "${{ steps.comparison.outputs.comparison_id }}" \
+            --dashboard-url http://evalforge.internal:5173 \
+            --json-out gate-report.json \
+            --markdown-out gate-report.md
+          echo "verdict=$(jq -r .verdict gate-report.json)" >> "$GITHUB_OUTPUT"
 
-          if [ "$VERDICT" = "fail" ]; then
-            echo "❌ Gate failed! Candidate is worse than baseline."
-            curl -s http://evalforge.internal:8000/api/comparisons/${{ steps.comparison.outputs.comparison_id }}/gate-decision | jq .
-            exit 1
-          fi
-
-          echo "✅ Gate passed. Candidate meets quality, latency, and cost thresholds."
-
-      - name: Post regression report (PR comment)
+      - name: Publish EvalForge report
         if: always()
         run: |
-          REPORT=$(curl -s http://evalforge.internal:8000/api/dashboard/latest | jq .)
-          echo "## EvalForge Regression Report" > report.md
-          echo "" >> report.md
-          echo "| Metric | Baseline | Candidate | Delta | Status |" >> report.md
-          echo "|--------|----------|-----------|-------|--------|" >> report.md
-          echo "$REPORT" | jq -r '.metrics[] | "| \(.label) | \(.baseline) | \(.candidate) | \(.delta) | \(.status) |"' >> report.md
-          echo "" >> report.md
-          echo "**Gate verdict: ${{ steps.gate.outputs.verdict }}**" >> report.md
-          echo "" >> report.md
-          echo "[View full dashboard](http://evalforge.internal:5173)" >> report.md
-          # In real setup: use `gh pr comment` or similar
+          cat gate-report.md >> "$GITHUB_STEP_SUMMARY"
+          # In a real setup: use `gh pr comment --body-file gate-report.md`.

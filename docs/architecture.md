@@ -2,12 +2,13 @@
 
 ## System Shape
 
-EvalForge AI is split into four layers:
+EvalForge AI is split into five layers:
 
 1. **Registry layer**: apps, versions, suites, cases, evaluator configs.
 2. **Execution layer**: run executor invokes app adapters and evaluators.
 3. **Analysis layer**: comparison service computes metrics, confidence intervals, and gate decisions.
-4. **Presentation layer**: dashboard API and React UI surface aggregate metrics and failed traces.
+4. **CI/CD layer**: gate report API and CLI turn comparison results into deploy-blocking artifacts.
+5. **Presentation layer**: dashboard API and React UI surface aggregate metrics and failed traces.
 
 ```mermaid
 flowchart LR
@@ -22,6 +23,7 @@ flowchart LR
     EVAL --> DB
     DB --> COMPARE["Comparison Service"]
     COMPARE --> DB
+    COMPARE --> GATE["CI Gate Report API/CLI"]
 ```
 
 ## Core Domain Model

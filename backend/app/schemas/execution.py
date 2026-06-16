@@ -90,3 +90,25 @@ class ComparisonRead(BaseModel):
 class GateDecisionRead(BaseModel):
     verdict: str
     reasons: list[dict[str, Any]]
+
+
+class CIGateMetricRead(BaseModel):
+    name: str
+    baseline: float
+    candidate: float
+    delta: float
+    delta_ci: list[float]
+    status: str
+
+
+class CIGateReportRead(BaseModel):
+    comparison_id: str
+    baseline_run_id: str
+    candidate_run_id: str
+    verdict: str
+    should_fail_ci: bool
+    dashboard_url: str | None
+    generated_at: str
+    metrics: list[CIGateMetricRead]
+    gate_reasons: list[dict[str, Any]]
+    markdown: str
