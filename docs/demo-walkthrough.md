@@ -40,7 +40,7 @@ Show:
 
 ### 15-35 seconds
 
-"The dashboard shows the regression across pass rate, semantic similarity, p95 latency, and cost. The candidate fails because quality drops and latency increases beyond the gate tolerance."
+"The dashboard shows the regression across pass rate, token-overlap similarity, p95 latency, and cost. The candidate fails because quality drops and latency increases beyond the gate tolerance."
 
 Show:
 
@@ -83,6 +83,7 @@ Show:
 
 - "I can explain how the run executor persists traces."
 - "I can explain why bootstrap CIs are used."
+- "I can explain the difference between token F1 overlap and embedding similarity."
 - "I can explain why calibration is still marked pending."
 - "I can walk through one failed case from database row to dashboard."
 
@@ -91,12 +92,12 @@ Show:
 Do not say:
 
 - "This is production-ready."
-- "This uses real distributed workers."
+- "This has production throughput numbers."
 - "The calibration study is complete."
 - "This proves model accuracy."
 
 Say:
 
 - "This is a strong local-first evaluation platform prototype."
-- "The next production step is Celery workers and real deployment validation."
+- "The Docker worker smoke is verified; the remaining production proof is measured multi-worker throughput."
 - "The calibration methodology is ready, but the hand-labeling study is pending."

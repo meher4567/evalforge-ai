@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadDashboardSnapshot, type DashboardSnapshot } from "./client";
-import { benchmarkSummary, gateRules, metrics, runs, traceCases } from "../data/demo";
+import {
+  benchmarkSummary,
+  gateRules,
+  metrics,
+  runs,
+  tagBreakdown,
+  traceCases,
+  tracePagination,
+} from "../data/demo";
 
 function snapshotWithCaseCount(caseCount: number): DashboardSnapshot {
   return {
@@ -12,6 +20,8 @@ function snapshotWithCaseCount(caseCount: number): DashboardSnapshot {
     metrics,
     runs,
     traceCases,
+    tracePagination,
+    tagBreakdown,
     gateRules,
   };
 }

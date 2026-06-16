@@ -1,10 +1,20 @@
-import { benchmarkSummary, gateRules, metrics, runs, traceCases } from "../data/demo";
+import {
+  benchmarkSummary,
+  gateRules,
+  metrics,
+  runs,
+  tagBreakdown,
+  traceCases,
+  tracePagination,
+} from "../data/demo";
 
 export interface DashboardSnapshot {
   benchmarkSummary: typeof benchmarkSummary;
   metrics: typeof metrics;
   runs: typeof runs;
   traceCases: typeof traceCases;
+  tracePagination: typeof tracePagination;
+  tagBreakdown: typeof tagBreakdown;
   gateRules: typeof gateRules;
 }
 
@@ -21,7 +31,15 @@ export async function loadDashboardSnapshot(
     return demo;
   }
 
-  return { benchmarkSummary, metrics, runs, traceCases, gateRules };
+  return {
+    benchmarkSummary,
+    metrics,
+    runs,
+    traceCases,
+    tracePagination,
+    tagBreakdown,
+    gateRules,
+  };
 }
 
 async function fetchDashboardSnapshot(url: string): Promise<DashboardSnapshot | null> {

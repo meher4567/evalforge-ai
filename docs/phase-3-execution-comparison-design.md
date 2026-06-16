@@ -6,13 +6,13 @@ Phase 3 makes EvalForge end-to-end on the backend. A user can trigger a run for 
 
 ## Execution Mode
 
-This phase uses an in-process deterministic executor. The public API is shaped like the future Celery-backed API, but the task runs immediately inside the request during tests and local demos.
+This phase started with an in-process deterministic executor. The public API now supports both sync execution for tests/local demos and Celery-backed execution for Redis worker runs.
 
-This is intentional for the current environment:
+This split is intentional:
 
-- Docker is not installed locally yet, so Redis/Celery cannot be verified here.
 - The deterministic executor proves the platform logic before adding queue infrastructure.
-- Later Celery tasks can call the same `execute_run()` service without changing the API contract.
+- The Celery worker path proves the same run, trace, evaluator, and comparison contracts under Redis-backed execution.
+- Docker Compose verified the Celery path locally on June 16, 2026 with 50-case baseline and candidate runs.
 
 ## Run Flow
 
@@ -52,4 +52,4 @@ After this phase, the user should be able to explain:
 - how evaluator errors differ from app failures,
 - why comparison should happen after both runs finish,
 - what bootstrap confidence intervals are doing at a high level,
-- why the Celery worker can be added later without changing core execution logic.
+- how the sync and Celery paths preserve the same run, trace, evaluator, and comparison contracts.

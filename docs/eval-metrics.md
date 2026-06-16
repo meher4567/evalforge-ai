@@ -19,7 +19,9 @@ EvalForge uses multiple evaluators and then gate rules decide whether the candid
 |---|---|---|
 | `exact_match` | answer equals expected output | score `0` or `1` |
 | `contains_keywords` | expected facts appear in answer | fraction of facts hit |
-| `semantic_similarity` | token-level similarity proxy | score from `0` to `1` |
+| `token_f1_overlap` | lexical token overlap with expected answer | score from `0` to `1` |
+| `semantic_similarity` | backward-compatible alias for `token_f1_overlap` | score from `0` to `1` |
+| `embedding_similarity` | sentence-transformer cosine similarity | score from `0` to `1` |
 | `retrieval_hit_rate` | expected document/chunk was retrieved | score `0` or `1` |
 | `forbidden_claim` | hallucination bait appears in answer | pass/fail |
 | `latency_threshold` | case latency under threshold | pass/fail |
@@ -41,11 +43,17 @@ pass_rate = sum(case_pass) / case_count
 
 Skipped evaluators are excluded from that evaluator's denominator. Errored evaluators are recorded and should be inspected.
 
-## Semantic Similarity
+## Similarity Evaluators
 
-The current semantic similarity evaluator is deterministic and lightweight. It is intentionally not marketed as a deep embedding model in the default path.
+EvalForge now separates lexical overlap from real semantic similarity.
 
-Why:
+`token_f1_overlap` is deterministic and lightweight. It uses token-level F1 and is appropriate for fast CI benchmarks.
+
+`semantic_similarity` remains available as a backward-compatible alias for old evaluator configs. It is intentionally marked in result details as an alias for `token_f1_overlap`, so the project does not pretend lexical overlap is an embedding model.
+
+`embedding_similarity` uses `sentence-transformers` with `all-MiniLM-L6-v2` and cosine similarity. It is a real local embedding evaluator, but it is slower than token F1 and should be used for smaller suites or calibration work.
+
+Why keep the lexical path:
 
 - no paid API dependency
 - fast benchmark
@@ -57,7 +65,7 @@ Limitation:
 - lexical/token similarity can miss paraphrases
 - fluent hallucinations can score higher than they deserve
 
-This limitation is exactly why the calibration study exists.
+This limitation is exactly why `embedding_similarity`, `forbidden_claim`, and the calibration study exist.
 
 ## Retrieval Hit Rate
 
@@ -96,7 +104,7 @@ Cost is tiny in the deterministic demo because no paid model API is called.
 Point estimates alone can be misleading. EvalForge computes bootstrap confidence intervals for:
 
 - pass rate
-- semantic similarity
+- token-overlap / semantic-alias similarity
 - p95 latency
 - mean cost
 
@@ -124,7 +132,7 @@ Current default gates:
 | Metric | Direction | Tolerance |
 |---|---|---|
 | pass rate | higher is better | `0.02` |
-| semantic similarity | higher is better | `0.02` |
+| token-overlap similarity | higher is better | `0.02` |
 | p95 latency | lower is better | `50ms` |
 | mean cost | lower is better | current demo uses a loose cost tolerance |
 

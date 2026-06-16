@@ -14,6 +14,22 @@ Returns API, database, and Redis health.
 
 Without Docker, database and Redis may be degraded.
 
+## Authentication
+
+By default, local APIs are unauthenticated. If `EVALFORGE_API_KEY` is set, all `/api/*` routes require either:
+
+```text
+X-EvalForge-Api-Key: <key>
+```
+
+or:
+
+```text
+Authorization: Bearer <key>
+```
+
+`GET /healthz` remains public so infrastructure can check liveness.
+
 ## Apps
 
 ### `POST /api/apps`
@@ -103,7 +119,8 @@ Returns case count and tag distribution.
   "config": {
     "evaluators": [
       {"name": "contains_keywords", "threshold": 0.8},
-      {"name": "semantic_similarity", "threshold": 0.5},
+      {"name": "token_f1_overlap", "threshold": 0.5},
+      {"name": "embedding_similarity", "threshold": 0.65},
       {"name": "retrieval_hit_rate"},
       {"name": "forbidden_claim"},
       {"name": "latency_threshold", "threshold_ms": 200},
@@ -125,7 +142,7 @@ Returns case count and tag distribution.
 }
 ```
 
-Current implementation executes in-process and returns a completed run for the deterministic demo.
+With `EVALFORGE_RUN_MODE=sync`, the API executes in-process and returns a completed run for the deterministic demo. With `EVALFORGE_RUN_MODE=celery`, it dispatches case tasks to Celery workers and returns a running run while workers complete it.
 
 ### `GET /api/runs`
 
@@ -184,11 +201,41 @@ Returns:
 
 Returns the latest computed comparison from the database in the shape consumed by the React dashboard.
 
+Optional query parameters:
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `comparison_id` | latest computed comparison | Select a specific comparison instead of the newest one |
+| `failure_limit` | `50` | Number of failed trace cases to return, from `1` to `200` |
+| `failure_offset` | `0` | Offset into the failed trace list |
+
+Additional dashboard fields:
+
+```json
+{
+  "tracePagination": {
+    "total": 2,
+    "limit": 1,
+    "offset": 1,
+    "returned": 1
+  },
+  "tagBreakdown": [
+    {
+      "tag": "easy",
+      "baselineCaseCount": 2,
+      "candidateCaseCount": 2,
+      "candidateFailureCount": 2,
+      "candidatePassRate": 0.0
+    }
+  ]
+}
+```
+
 Returns `404` when no computed comparison exists.
 
 ### `GET /api/dashboard/demo`
 
-Returns the committed benchmark-backed demo snapshot. This is useful when the database is empty or the frontend is being developed separately.
+Returns the committed benchmark-backed demo snapshot with the same dashboard fields. This is useful when the database is empty or the frontend is being developed separately.
 
 ## Error Semantics
 

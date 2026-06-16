@@ -1,0 +1,52 @@
+# EvalForge AI — Model Cost Configuration
+# Maps model identifiers to their published per-1K-token pricing.
+# Used by the cost simulator to estimate API spend.
+#
+# All rates in USD. Update as pricing changes; commit the new file.
+
+models:
+  gpt-4o:
+    input_per_1k: 0.005
+    output_per_1k: 0.015
+    as_of: "2026-05-01"
+    provider: openai
+
+  gpt-4o-mini:
+    input_per_1k: 0.00015
+    output_per_1k: 0.0006
+    as_of: "2026-05-01"
+    provider: openai
+
+  gpt-3.5-turbo:
+    input_per_1k: 0.0005
+    output_per_1k: 0.0015
+    as_of: "2026-05-01"
+    provider: openai
+
+  llama-3.2-3b-ollama:
+    input_per_1k: 0.0
+    output_per_1k: 0.0
+    as_of: "2026-05-01"
+    provider: ollama
+    note: "Local model — zero marginal API cost; infrastructure cost not modeled"
+
+  llama-3.1-8b-ollama:
+    input_per_1k: 0.0
+    output_per_1k: 0.0
+    as_of: "2026-05-01"
+    provider: ollama
+    note: "Local model — zero marginal API cost"
+
+  mistral-7b-ollama:
+    input_per_1k: 0.0
+    output_per_1k: 0.0
+    as_of: "2026-05-01"
+    provider: ollama
+    note: "Local model — zero marginal API cost"
+
+  # Default model — used when the specific model is not found in the config
+  _default:
+    input_per_1k: 0.001
+    output_per_1k: 0.002
+    as_of: "2026-05-01"
+    note: "Conservative default for unrecognized models"

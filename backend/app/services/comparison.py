@@ -105,7 +105,14 @@ async def collect_run_metric_samples(session: AsyncSession, run_id: str) -> dict
         if item.recorded_cost_usd is not None:
             samples["cost_mean_usd"].append(float(item.recorded_cost_usd))
         for result in result_rows:
-            if result.evaluator_name == "semantic_similarity" and result.score is not None:
+            if (
+                result.evaluator_name
+                in {
+                    "semantic_similarity",
+                    "token_f1_overlap",
+                }
+                and result.score is not None
+            ):
                 samples["semantic_similarity"].append(float(result.score))
 
     return dict(samples)

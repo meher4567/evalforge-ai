@@ -545,6 +545,39 @@ tbody tr.is-selected {
   padding: 0;
 }
 
+.tag-pass-rate {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 52px;
+  gap: 10px;
+  align-items: center;
+  max-width: 220px;
+}
+
+.tag-pass-rate::before {
+  grid-column: 1;
+  grid-row: 1;
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: #edf1f6;
+  content: "";
+}
+
+.tag-pass-rate__bar {
+  grid-column: 1;
+  grid-row: 1;
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.tag-pass-rate strong {
+  color: var(--text);
+  font-size: 12px;
+  text-align: right;
+}
+
 .icon-button {
   display: inline-grid;
   width: 36px;

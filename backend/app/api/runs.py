@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import get_session
 from app.models import EvalResult, EvalRun, EvalRunItem, Trace
 from app.schemas import RunCreate, RunItemRead, RunRead, TraceRead
+from app.services.run_dispatcher import dispatch_run
 from app.services.run_executor import execute_run
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -16,7 +18,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 @router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
 async def create_run(payload: RunCreate, session: SessionDep) -> EvalRun:
     try:
-        return await execute_run(
+        settings = get_settings()
+        runner = dispatch_run if settings.run_mode == "celery" else execute_run
+        return await runner(
             session,
             app_version_id=payload.app_version_id,
             suite_id=payload.suite_id,

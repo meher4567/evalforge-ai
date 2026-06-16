@@ -58,7 +58,7 @@ export function TraceInspector({ cases, selectedIndex, onSelectIndex }: TraceIns
 
       <div className="trace-score-grid">
         <span>
-          Semantic <strong>{selected.semanticScore.toFixed(2)}</strong>
+          Token overlap <strong>{selected.semanticScore.toFixed(2)}</strong>
         </span>
         <span>
           Keywords <strong>{selected.keywordScore.toFixed(2)}</strong>

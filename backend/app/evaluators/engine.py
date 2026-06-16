@@ -13,6 +13,8 @@ EVALUATOR_REGISTRY: dict[str, EvaluatorFn] = {
     "exact_match": basic.exact_match,
     "contains_keywords": basic.contains_keywords,
     "semantic_similarity": basic.semantic_similarity,
+    "token_f1_overlap": basic.token_f1_overlap,
+    "embedding_similarity": basic.embedding_similarity,
     "retrieval_hit_rate": basic.retrieval_hit_rate,
     "forbidden_claim": basic.forbidden_claim,
     "latency_threshold": basic.latency_threshold,

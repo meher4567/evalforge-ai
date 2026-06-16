@@ -20,6 +20,16 @@ from app.models import (
     Trace,
 )
 
+SENSITIVE_CONFIG_PARTS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+
 
 async def execute_run(
     session: AsyncSession,
@@ -79,7 +89,7 @@ async def execute_run(
                     run_item_id=item.id,
                     payload={
                         "input": case.payload.get("input", {}),
-                        "version_config": version.config,
+                        "version_config": redact_sensitive_config(version.config),
                         "steps": output.trace_steps,
                         "output": {
                             "answer": output.answer,
@@ -145,3 +155,18 @@ def extract_question(case_payload: dict) -> str:
     if isinstance(raw_input, dict):
         return str(raw_input.get("question", ""))
     return str(raw_input)
+
+
+def redact_sensitive_config(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, nested_value in value.items():
+            key_text = str(key).lower()
+            if any(part in key_text for part in SENSITIVE_CONFIG_PARTS):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = redact_sensitive_config(nested_value)
+        return redacted
+    if isinstance(value, list):
+        return [redact_sensitive_config(item) for item in value]
+    return value

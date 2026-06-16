@@ -5,6 +5,11 @@ from typing import Any
 from app.adapters.base import AdapterOutput
 from app.evaluators.base import EvaluationResult
 from app.evaluators.text import normalize_text, token_f1
+from app.services.embedding_cache import (
+    EMBEDDING_MODEL_ID,
+    compute_embedding_sync,
+    cosine_similarity,
+)
 
 
 def exact_match(
@@ -52,17 +57,72 @@ def semantic_similarity(
     output: AdapterOutput,
     config: dict[str, Any],
 ) -> EvaluationResult:
+    result = _token_f1_result(
+        evaluator_name="semantic_similarity",
+        case_payload=case_payload,
+        output=output,
+        config=config,
+    )
+    if result.details is not None and not result.skipped:
+        result.details["alias_for"] = "token_f1_overlap"
+    return result
+
+
+def token_f1_overlap(
+    case_payload: dict[str, Any],
+    output: AdapterOutput,
+    config: dict[str, Any],
+) -> EvaluationResult:
+    return _token_f1_result(
+        evaluator_name="token_f1_overlap",
+        case_payload=case_payload,
+        output=output,
+        config=config,
+    )
+
+
+def _token_f1_result(
+    evaluator_name: str,
+    case_payload: dict[str, Any],
+    output: AdapterOutput,
+    config: dict[str, Any],
+) -> EvaluationResult:
     expected = case_payload.get("expected_output")
     if expected is None:
-        return skipped("semantic_similarity", "missing expected_output")
+        return skipped(evaluator_name, "missing expected_output")
 
     score = token_f1(output.answer, str(expected))
     threshold = float(config.get("threshold", 0.7))
     return EvaluationResult(
-        evaluator_name="semantic_similarity",
+        evaluator_name=evaluator_name,
         score=score,
         passed=score >= threshold,
         details={"threshold": threshold, "method": "token_f1"},
+    )
+
+
+def embedding_similarity(
+    case_payload: dict[str, Any],
+    output: AdapterOutput,
+    config: dict[str, Any],
+) -> EvaluationResult:
+    expected = case_payload.get("expected_output")
+    if expected is None:
+        return skipped("embedding_similarity", "missing expected_output")
+
+    expected_embedding = compute_embedding_sync(str(expected))
+    actual_embedding = compute_embedding_sync(output.answer)
+    score = round(cosine_similarity(actual_embedding, expected_embedding), 6)
+    threshold = float(config.get("threshold", 0.7))
+    return EvaluationResult(
+        evaluator_name="embedding_similarity",
+        score=score,
+        passed=score >= threshold,
+        details={
+            "threshold": threshold,
+            "method": "sentence_transformer_cosine",
+            "model": EMBEDDING_MODEL_ID,
+        },
     )
 
 

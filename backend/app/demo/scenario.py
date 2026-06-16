@@ -53,7 +53,7 @@ async def run_demo_scenario(
             config={
                 "evaluators": [
                     {"name": "contains_keywords", "threshold": 0.8},
-                    {"name": "semantic_similarity", "threshold": 0.5},
+                    {"name": "token_f1_overlap", "threshold": 0.5},
                     {"name": "retrieval_hit_rate"},
                     {"name": "forbidden_claim"},
                     {"name": "latency_threshold", "threshold_ms": 200},

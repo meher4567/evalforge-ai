@@ -82,7 +82,7 @@ async def run_evals(
 ) -> RunResult:
     """Run a complete eval cycle (baseline + candidate + comparison) via direct DB access."""
     from app.db.base import Base
-    from app.db.session import async_session_factory
+    from app.db.session import SessionLocal
     from app.models import (
         AppVersion,
         EvalSuite,
@@ -93,13 +93,13 @@ async def run_evals(
     from app.services.run_dispatcher import dispatch_run
     from app.services.run_executor import execute_run
 
-    engine = async_session_factory.kw["bind"]
+    engine = SessionLocal.kw["bind"]
 
     # Ensure tables exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with async_session_factory() as session:
+    async with SessionLocal() as session:
         # Look up entities by name
         suite = await session.scalar(select(EvalSuite).where(EvalSuite.name == suite_name))
         if suite is None:

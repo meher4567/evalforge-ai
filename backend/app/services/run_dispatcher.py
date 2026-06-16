@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from celery import chord, group
+from celery import chord
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +23,9 @@ from app.models import (
     EvalSuiteCase,
     EvaluatorConfig,
 )
-from app.workers.celery_app import celery_app  # noqa: F401 — register Celery app before task imports
+from app.workers.celery_app import (
+    celery_app,  # noqa: F401 — register Celery app before task imports
+)
 from app.workers.tasks import check_run_completion, run_eval_case
 
 logger = logging.getLogger("evalforge.run_dispatcher")
@@ -103,9 +105,8 @@ async def dispatch_run(
 
     await session.commit()
 
-    # Dispatch all tasks as a Celery group with a completion callback
+    # Dispatch all tasks as a Celery chord so the run is finalized after workers finish.
     if task_signatures:
-        # Use Celery chord: execute callback after all tasks in group complete
         job = chord(task_signatures, check_run_completion.s(run_id=run.id))
         job.apply_async()
         logger.info(

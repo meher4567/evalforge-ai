@@ -95,6 +95,7 @@ async def seed_rag_project(client: AsyncClient):
     )
 
     return {
+        "app_id": app_id,
         "baseline_version_id": baseline_response.json()["id"],
         "candidate_version_id": candidate_response.json()["id"],
         "suite_id": suite_id,
@@ -131,6 +132,51 @@ async def test_run_execution_stores_items_results_and_traces(client: AsyncClient
     trace_response = await client.get(f"/api/runs/{run['id']}/traces/{items[0]['case_id']}")
     assert trace_response.status_code == 200
     assert trace_response.json()["payload"]["steps"][0]["step"] == "retrieve"
+
+
+@pytest.mark.anyio
+async def test_run_trace_redacts_sensitive_version_config(client: AsyncClient):
+    ids = await seed_rag_project(client)
+    secret = "test-secret-value"
+    version_response = await client.post(
+        f"/api/apps/{ids['app_id']}/versions",
+        json={
+            "name": "v_secret_config",
+            "adapter_module": "app.adapters.demo_rag",
+            "config": {
+                "top_k": 1,
+                "api_key": secret,
+                "headers": {"Authorization": f"Bearer {secret}"},
+                "corpus": [
+                    {
+                        "doc_id": "venv",
+                        "text": "The venv module creates lightweight Python virtual environments.",
+                        "answer": "Python uses the venv module for virtual environments.",
+                    }
+                ],
+            },
+        },
+    )
+    assert version_response.status_code == 201
+
+    run_response = await client.post(
+        "/api/runs",
+        json={
+            "app_version_id": version_response.json()["id"],
+            "suite_id": ids["suite_id"],
+            "evaluator_config_id": ids["evaluator_config_id"],
+        },
+    )
+    assert run_response.status_code == 201
+    run = run_response.json()
+    items_response = await client.get(f"/api/runs/{run['id']}/items")
+    item = items_response.json()[0]
+    trace_response = await client.get(f"/api/runs/{run['id']}/traces/{item['case_id']}")
+    payload = trace_response.json()["payload"]
+
+    assert payload["version_config"]["api_key"] == "[REDACTED]"
+    assert payload["version_config"]["headers"]["Authorization"] == "[REDACTED]"
+    assert secret not in str(payload)
 
 
 @pytest.mark.anyio

@@ -56,8 +56,8 @@ erDiagram
 10. Trace and evaluator results are persisted.
 11. Comparison service computes regression metrics and bootstrap CIs.
 12. Gate rules produce pass/warn/fail.
-13. Dashboard API returns the latest comparison snapshot.
-14. React dashboard shows metrics, failed cases, and trace evidence.
+13. Dashboard API returns the selected or latest comparison snapshot with failed-case pagination.
+14. React dashboard shows metrics, failed cases, tag breakdowns, and trace evidence.
 
 ## Why The Adapter Boundary Matters
 
@@ -93,8 +93,8 @@ sequenceDiagram
 
     Browser->>Frontend: Load dashboard
     Frontend->>API: GET /api/dashboard/latest
-    API->>DB: Load latest comparison + report
-    API->>DB: Load runs, results, traces, gate rules
+    API->>DB: Load requested/latest comparison + report
+    API->>DB: Load runs, results, paged traces, tag breakdown, gate rules
     API-->>Frontend: Dashboard snapshot
     Frontend-->>Browser: Metrics + failed trace UI
 ```
@@ -108,13 +108,14 @@ Docker Compose defines:
 - PostgreSQL with pgvector image
 - Redis
 - FastAPI backend
+- Celery worker
 - Nginx-served frontend build
 
-Docker runtime has not been verified in this environment because Docker is not installed. The files are present, but the runtime claim should wait until Docker Desktop is available.
+Docker runtime was verified locally on June 16, 2026. The Compose stack built and started successfully, `/healthz` returned `ok`, and a 50-case Celery seed completed both baseline and candidate runs through the worker path before computing the comparison gate.
 
 ## Scaling Path
 
-The current executor is in-process. The intended scaling path is:
+EvalForge supports sync execution for deterministic tests and Celery execution for Redis-backed worker runs. The next scaling path is:
 
 1. Keep the API request fast by creating the run and enqueueing tasks.
 2. Use Redis as broker.

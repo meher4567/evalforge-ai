@@ -11,7 +11,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=ghcr.io/astral-sh/uv:0.11.17 /uv /uvx /bin/
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev
+RUN uv sync --no-dev --no-group ml
 
 COPY app ./app
 

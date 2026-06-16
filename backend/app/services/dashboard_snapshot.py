@@ -27,6 +27,8 @@ def load_demo_dashboard_snapshot() -> dict[str, Any]:
         "metrics": _build_metrics(metrics),
         "runs": _build_runs(metrics),
         "traceCases": _build_trace_cases(),
+        "tracePagination": _build_trace_pagination(),
+        "tagBreakdown": _build_tag_breakdown(),
         "gateRules": _build_gate_rules(),
     }
 
@@ -39,7 +41,7 @@ def _load_benchmark_result() -> dict[str, Any]:
 def _build_metrics(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     metric_specs = [
         ("pass_rate", "Pass rate", "Pass", "%", "higher", 0.02),
-        ("semantic_similarity", "Semantic similarity", "Similarity", "score", "higher", 0.02),
+        ("semantic_similarity", "Token overlap", "Overlap", "score", "higher", 0.02),
         ("p95_latency_ms", "p95 latency", "p95", "ms", "lower", 50.0),
         ("cost_mean_usd", "Mean cost", "Cost", "usd", "lower", 0.2),
     ]
@@ -126,7 +128,7 @@ def _build_trace_cases() -> list[dict[str, Any]]:
         {
             "id": "demo-0001",
             "tag": "hallucination_risk",
-            "evaluator": "semantic_similarity",
+            "evaluator": "token_f1_overlap",
             "reason": "Candidate answered with forbidden synthetic claim",
             "question": "Which Python module is used for venv?",
             "expected": "Python uses the venv module for virtual environments.",
@@ -241,6 +243,41 @@ def _build_trace_cases() -> list[dict[str, Any]]:
     ]
 
 
+def _build_trace_pagination() -> dict[str, int]:
+    return {
+        "total": 500,
+        "limit": 3,
+        "offset": 0,
+        "returned": 3,
+    }
+
+
+def _build_tag_breakdown() -> list[dict[str, Any]]:
+    return [
+        {
+            "tag": "hallucination_risk",
+            "baselineCaseCount": 180,
+            "candidateCaseCount": 180,
+            "candidateFailureCount": 180,
+            "candidatePassRate": 0.0,
+        },
+        {
+            "tag": "reasoning_required",
+            "baselineCaseCount": 170,
+            "candidateCaseCount": 170,
+            "candidateFailureCount": 170,
+            "candidatePassRate": 0.0,
+        },
+        {
+            "tag": "edge_case",
+            "baselineCaseCount": 150,
+            "candidateCaseCount": 150,
+            "candidateFailureCount": 150,
+            "candidatePassRate": 0.0,
+        },
+    ]
+
+
 def _build_gate_rules() -> list[dict[str, str]]:
     return [
         {
@@ -250,7 +287,7 @@ def _build_gate_rules() -> list[dict[str, str]]:
             "verdict": "fail",
         },
         {
-            "metric": "Semantic similarity",
+            "metric": "Token overlap",
             "direction": "higher",
             "tolerance": "0.02 score drop",
             "verdict": "fail",

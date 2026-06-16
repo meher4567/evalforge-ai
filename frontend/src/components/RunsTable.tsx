@@ -29,7 +29,7 @@ export function RunsTable({ runs, selectedRunId, onSelectRun }: RunsTableProps) 
               <th>Version</th>
               <th>Cases</th>
               <th>Pass</th>
-              <th>Similarity</th>
+              <th>Overlap</th>
               <th>p95</th>
               <th>Cost</th>
               <th>Status</th>

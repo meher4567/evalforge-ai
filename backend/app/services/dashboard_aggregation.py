@@ -21,14 +21,20 @@ from app.models import (
 
 METRIC_SPECS = [
     ("pass_rate", "Pass rate", "Pass", "%", "higher", 0.02),
-    ("semantic_similarity", "Semantic similarity", "Similarity", "score", "higher", 0.02),
+    ("semantic_similarity", "Token overlap", "Overlap", "score", "higher", 0.02),
     ("p95_latency_ms", "p95 latency", "p95", "ms", "lower", 50.0),
     ("cost_mean_usd", "Mean cost", "Cost", "usd", "lower", 0.2),
 ]
 
 
-async def build_latest_dashboard_snapshot(session: AsyncSession) -> dict[str, Any] | None:
-    comparison = await _load_latest_comparison(session)
+async def build_latest_dashboard_snapshot(
+    session: AsyncSession,
+    *,
+    comparison_id: str | None = None,
+    failure_limit: int = 50,
+    failure_offset: int = 0,
+) -> dict[str, Any] | None:
+    comparison = await _load_comparison(session, comparison_id)
     if comparison is None:
         return None
 
@@ -41,11 +47,21 @@ async def build_latest_dashboard_snapshot(session: AsyncSession) -> dict[str, An
     if baseline is None or candidate is None:
         return None
 
+    trace_cases = await _build_trace_cases(session, baseline, candidate)
+    paginated_trace_cases = trace_cases[failure_offset : failure_offset + failure_limit]
+
     return {
         "benchmarkSummary": await _build_summary(session, baseline, candidate, report),
         "metrics": _build_metrics(report.metrics, report.gate_reasons),
         "runs": await _build_runs(session, baseline, candidate),
-        "traceCases": await _build_trace_cases(session, baseline, candidate),
+        "traceCases": paginated_trace_cases,
+        "tracePagination": {
+            "total": len(trace_cases),
+            "limit": failure_limit,
+            "offset": failure_offset,
+            "returned": len(paginated_trace_cases),
+        },
+        "tagBreakdown": await _build_tag_breakdown(session, baseline, candidate),
         "gateRules": await _build_gate_rules(
             session,
             comparison.gate_rules_id,
@@ -54,7 +70,13 @@ async def build_latest_dashboard_snapshot(session: AsyncSession) -> dict[str, An
     }
 
 
-async def _load_latest_comparison(session: AsyncSession) -> Comparison | None:
+async def _load_comparison(
+    session: AsyncSession,
+    comparison_id: str | None,
+) -> Comparison | None:
+    if comparison_id is not None:
+        return await session.get(Comparison, comparison_id)
+
     return await session.scalar(
         select(Comparison)
         .where(Comparison.status == "computed")
@@ -198,7 +220,7 @@ async def _collect_run_display_samples(
         samples["case_passes"].append(
             1.0 if applicable and all(result.passed for result in applicable) else 0.0
         )
-        semantic = _find_result(results, "semantic_similarity")
+        semantic = _find_first_result(results, ["token_f1_overlap", "semantic_similarity"])
         if semantic and semantic.score is not None:
             samples["semantic_scores"].append(_as_float(semantic.score))
         if item.recorded_latency_ms is not None:
@@ -253,6 +275,70 @@ async def _build_trace_cases(
     return sorted(trace_cases, key=lambda trace_case: trace_case["id"])
 
 
+async def _build_tag_breakdown(
+    session: AsyncSession,
+    baseline: EvalRun,
+    candidate: EvalRun,
+) -> list[dict[str, Any]]:
+    baseline_counts = await _run_case_counts_by_tag(session, baseline.id)
+    candidate_counts = await _run_case_counts_by_tag(session, candidate.id)
+    candidate_failures = await _run_failure_counts_by_tag(session, candidate.id)
+    tags = sorted(set(baseline_counts) | set(candidate_counts) | set(candidate_failures))
+
+    breakdown = []
+    for tag in tags:
+        candidate_count = candidate_counts.get(tag, 0)
+        failure_count = candidate_failures.get(tag, 0)
+        breakdown.append(
+            {
+                "tag": tag,
+                "baselineCaseCount": baseline_counts.get(tag, 0),
+                "candidateCaseCount": candidate_count,
+                "candidateFailureCount": failure_count,
+                "candidatePassRate": _candidate_pass_rate(candidate_count, failure_count),
+            }
+        )
+    return breakdown
+
+
+async def _run_case_counts_by_tag(session: AsyncSession, run_id: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
+    for item in items:
+        case = await session.get(EvalCase, item.case_id)
+        if case is None:
+            continue
+        tag = _first_tag(case.payload)
+        counts[tag] = counts.get(tag, 0) + 1
+    return counts
+
+
+async def _run_failure_counts_by_tag(session: AsyncSession, run_id: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
+    for item in items:
+        case = await session.get(EvalCase, item.case_id)
+        if case is None:
+            continue
+        if await _run_item_has_failure(session, item.id):
+            tag = _first_tag(case.payload)
+            counts[tag] = counts.get(tag, 0) + 1
+    return counts
+
+
+async def _run_item_has_failure(session: AsyncSession, run_item_id: str) -> bool:
+    results = list(
+        await session.scalars(select(EvalResult).where(EvalResult.run_item_id == run_item_id))
+    )
+    return any(result.passed is False and not result.skipped for result in results)
+
+
+def _candidate_pass_rate(candidate_count: int, failure_count: int) -> float:
+    if candidate_count == 0:
+        return 0.0
+    return round(1 - (failure_count / candidate_count), 6)
+
+
 async def _load_items_by_case(session: AsyncSession, run_id: str) -> dict[str, EvalRunItem]:
     items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
     return {item.case_id: item for item in items}
@@ -279,7 +365,7 @@ def _trace_case_to_dashboard_row(
     results: list[EvalResult],
     failed_result: EvalResult,
 ) -> dict[str, Any]:
-    semantic = _find_result(results, "semantic_similarity")
+    semantic = _find_first_result(results, ["token_f1_overlap", "semantic_similarity"])
     keywords = _find_result(results, "contains_keywords")
     retrieval = _find_result(results, "retrieval_hit_rate")
     payload = case.payload
@@ -383,6 +469,17 @@ def _metric_label(metric: str) -> str:
 def _find_result(results: list[EvalResult], evaluator_name: str) -> EvalResult | None:
     for result in results:
         if result.evaluator_name == evaluator_name:
+            return result
+    return None
+
+
+def _find_first_result(
+    results: list[EvalResult],
+    evaluator_names: list[str],
+) -> EvalResult | None:
+    for evaluator_name in evaluator_names:
+        result = _find_result(results, evaluator_name)
+        if result is not None:
             return result
     return None
 

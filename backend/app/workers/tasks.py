@@ -37,6 +37,7 @@ from app.models import (
     EvaluatorConfig,
     Trace,
 )
+from app.services.run_executor import redact_sensitive_config
 
 logger = get_task_logger(__name__)
 
@@ -146,7 +147,7 @@ def run_eval_case(
                 run_item_id=run_item.id,
                 payload={
                     "input": case.payload.get("input", {}),
-                    "version_config": version.config,
+                    "version_config": redact_sensitive_config(version.config),
                     "steps": output.trace_steps,
                     "output": {
                         "answer": output.answer,
@@ -237,12 +238,23 @@ def run_eval_case(
 
 
 @shared_task(name="evalforge.check_run_completion")
-def check_run_completion(run_id: str) -> dict:
+def check_run_completion(
+    chord_results: list[dict] | None = None,
+    run_id: str | None = None,
+) -> dict:
     """
     Check if all items in a run are complete and update run status.
 
-    Called after each eval_case task completes (via callback).
+    Celery chords pass the header result list as the first positional callback
+    argument, while EvalForge supplies run_id as a keyword.
     """
+    if run_id is None and isinstance(chord_results, str):
+        run_id = chord_results
+
+    if run_id is None:
+        logger.warning("Run completion callback invoked without run_id")
+        return {"status": "unknown"}
+
     with Session(_engine) as session:
         result = session.execute(
             text(

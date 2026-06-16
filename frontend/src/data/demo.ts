@@ -67,6 +67,21 @@ export interface TraceCase {
   chunks: RetrievedChunk[];
 }
 
+export interface TracePagination {
+  total: number;
+  limit: number;
+  offset: number;
+  returned: number;
+}
+
+export interface TagBreakdownRow {
+  tag: string;
+  baselineCaseCount: number;
+  candidateCaseCount: number;
+  candidateFailureCount: number;
+  candidatePassRate: number;
+}
+
 export interface CalibrationSignal {
   evaluator: string;
   pearson: number;
@@ -119,8 +134,8 @@ export const metrics: MetricSummary[] = [
   },
   {
     key: "semantic_similarity",
-    label: "Semantic similarity",
-    shortLabel: "Similarity",
+    label: "Token overlap",
+    shortLabel: "Overlap",
     unit: "score",
     baseline: 1,
     candidate: 0.284951,
@@ -219,7 +234,7 @@ export const traceCases: TraceCase[] = [
   {
     id: "demo-0001",
     tag: "hallucination_risk",
-    evaluator: "semantic_similarity",
+    evaluator: "token_f1_overlap",
     reason: "Candidate answered with forbidden synthetic claim",
     question: "Which Python module is used for venv?",
     expected: "Python uses the venv module for virtual environments.",
@@ -326,6 +341,37 @@ export const traceCases: TraceCase[] = [
   },
 ];
 
+export const tracePagination: TracePagination = {
+  total: 500,
+  limit: 3,
+  offset: 0,
+  returned: 3,
+};
+
+export const tagBreakdown: TagBreakdownRow[] = [
+  {
+    tag: "hallucination_risk",
+    baselineCaseCount: 180,
+    candidateCaseCount: 180,
+    candidateFailureCount: 180,
+    candidatePassRate: 0,
+  },
+  {
+    tag: "reasoning_required",
+    baselineCaseCount: 170,
+    candidateCaseCount: 170,
+    candidateFailureCount: 170,
+    candidatePassRate: 0,
+  },
+  {
+    tag: "edge_case",
+    baselineCaseCount: 150,
+    candidateCaseCount: 150,
+    candidateFailureCount: 150,
+    candidatePassRate: 0,
+  },
+];
+
 export const calibrationSignals: CalibrationSignal[] = [
   {
     evaluator: "Retrieval hit rate",
@@ -335,7 +381,7 @@ export const calibrationSignals: CalibrationSignal[] = [
     finding: "Preview signal on retrieval_required cases",
   },
   {
-    evaluator: "Semantic similarity",
+    evaluator: "Token F1 overlap",
     pearson: 0.78,
     spearman: 0.74,
     agreementRate: 0.72,
@@ -371,7 +417,7 @@ export const gateRules: GateRule[] = [
     verdict: "fail",
   },
   {
-    metric: "Semantic similarity",
+    metric: "Token overlap",
     direction: "higher",
     tolerance: "0.02 score drop",
     verdict: "fail",

@@ -17,6 +17,15 @@ describe("EvalForge dashboard", () => {
     expect(screen.getByLabelText("Comparison summary")).toBeInTheDocument();
   });
 
+  it("keeps primary navigation buttons accessible when labels collapse", () => {
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "Comparison" })).toHaveAttribute(
+      "aria-label",
+      "Comparison",
+    );
+  });
+
   it("filters failures from the comparison screen", () => {
     render(<App />);
 
@@ -25,6 +34,15 @@ describe("EvalForge dashboard", () => {
 
     expect(screen.getByText("demo-0010")).toBeInTheDocument();
     expect(screen.queryByText("demo-0001")).not.toBeInTheDocument();
+  });
+
+  it("shows per-tag quality breakdown on the comparison screen", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Comparison" }));
+
+    expect(screen.getByRole("heading", { name: "Tag breakdown" })).toBeInTheDocument();
+    expect(screen.getByText("Candidate pass rate by first case tag")).toBeInTheDocument();
   });
 
   it("moves through failed traces", () => {

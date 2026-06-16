@@ -147,7 +147,7 @@ The demo candidate intentionally injects forbidden synthetic claims. That makes 
 
 ### What is still missing?
 
-Real Celery workers, Docker runtime verification, real repeated-run flakiness over adapter executions, dashboard filters/pagination, final hand-labeled calibration findings, and demo video. The project documents these honestly.
+Measured multi-worker Celery throughput, real repeated-run flakiness over adapter executions, deeper dashboard filters, final hand-labeled calibration findings, and demo video. The Docker/Celery smoke path is now verified locally, but production scale numbers are still not claimed.
 
 ## How To Study This Project
 
