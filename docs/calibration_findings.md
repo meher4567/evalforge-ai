@@ -2,7 +2,7 @@
 
 ## Status
 
-This document is a calibration-ready findings template plus preliminary synthetic evidence from the deterministic demo benchmark. It is not yet the final hand-labeled calibration study. The final A-grade version requires the project owner to label the gold set manually using `docs/labeling_rubric.md`.
+This document contains a calibration-ready findings template plus preliminary synthetic evidence from the deterministic demo benchmark. It is not yet the final hand-labeled calibration study. Final calibration findings require manually labeled gold-set outputs using `docs/labeling_rubric.md`.
 
 ## Methodology For Final Study
 
@@ -42,7 +42,7 @@ Current deterministic benchmark:
 
 - The current finding is synthetic, not hand-labeled.
 - The current semantic evaluator is token-overlap based, not a sentence-transformer model.
-- The final project owner must complete the human gold-set labels before using this as a resume calibration claim.
+- Human gold-set labels must be completed before publishing calibration claims.
 - Single-labeler calibration is weaker than multi-labeler calibration; self-agreement must be reported honestly.
 
 ## Final Study Checklist

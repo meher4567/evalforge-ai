@@ -4,14 +4,6 @@ EvalForge AI is an evaluation and regression testing platform for RAG and LLM ap
 
 ![EvalForge dashboard](docs/design/phase-5-dashboard-render.png)
 
-## Honest Grade
-
-Current grade: **A / 9.0 for a fresher portfolio project**.
-
-This is not a production SaaS and not senior-level MAANG infrastructure. It is, however, a strong fresher project because it solves a real AI engineering problem with a concrete backend, measured benchmark, trace storage, regression metrics, a dashboard, CI, and honest documentation.
-
-Read the full self-review in `docs/a-grade-review.md`.
-
 ## Current Demo Numbers
 
 Measured on the deterministic demo benchmark committed in `benchmarks/results/2026-05-31/demo_results.json`:
@@ -25,7 +17,7 @@ Measured on the deterministic demo benchmark committed in `benchmarks/results/20
 - candidate token-overlap similarity: 0.284951
 - gate verdict: fail
 
-The committed benchmark is deterministic on purpose. It uses the local demo adapter so CI and interviews can reproduce the same numbers. The project also includes a real Groq-backed adapter and an optional live smoke test for proving external model execution.
+The committed benchmark is deterministic on purpose. It uses the local demo adapter so CI and local development can reproduce the same numbers. The project also includes a real Groq-backed adapter and an optional live smoke test for external model execution.
 
 Docker/Celery smoke verified on June 16, 2026:
 
@@ -57,17 +49,15 @@ Docker/Celery smoke verified on June 16, 2026:
 - backend and frontend tests
 - GitHub Actions CI workflow
 
-See `docs/project-status.md` for the honest phase-by-phase status.
+See `docs/project-status.md` for implementation status and remaining operational work.
 
 ## Documentation Map
 
-- `docs/a-grade-review.md`: honest grade, MAANG-level reality check, resume claims
 - `docs/architecture.md`: system architecture, domain model, data flow
 - `docs/api.md`: API reference with request examples
 - `docs/eval-metrics.md`: evaluator logic, bootstrap CIs, gates, flakiness
-- `docs/demo-walkthrough.md`: 90-second interview demo script
-- `docs/learning-roadmap.md`: file-by-file study path
-- `docs/interview-defense-guide.md`: questions and answer outlines
+- `docs/benchmark-interpretation.md`: benchmark scope and interpretation
+- `docs/project-status.md`: implementation status and remaining work
 
 ## Prerequisites
 
@@ -306,12 +296,8 @@ uv run --directory backend python -m app.cli.gate `
 
 The command exits `1` when the gate verdict is `fail`, writes machine-readable JSON, and writes a Markdown summary suitable for a GitHub step summary or PR comment. Add `--fail-on-warn` when warning verdicts should block deploys too.
 
-## Sprint 0 Interview Explanation
+## Operational Scope
 
-I started EvalForge by building a reproducible backend foundation. FastAPI exposes the API, PostgreSQL stores future platform state, Redis supports future background jobs, and Docker Compose runs the stack locally. The first endpoint is `/healthz`, which checks that the API, database, and Redis are reachable before any evaluation features are added.
+EvalForge can run deterministic RAG regression benchmarks, call a real Groq-compatible model through an adapter, persist traces and evaluator results, compute comparison metrics with confidence intervals, protect APIs with an optional key, migrate the schema with Alembic, execute worker jobs through Docker Compose and Celery, emit CI/CD deployment gate artifacts, and surface failed-case evidence in the dashboard.
 
-## Interview Explanation Now
-
-EvalForge is no longer only a backend foundation. The current version can run a deterministic RAG regression benchmark, call a real Groq model through an adapter, persist traces and evaluator results, compute comparison metrics with confidence intervals, protect APIs with an optional key, migrate the schema with Alembic, execute the worker path through Docker Compose and Celery, emit a CI/CD deployment gate artifact, and show the result in a dashboard with failed-case pagination and per-tag breakdowns. The strongest interview story is the failure trace: a candidate version produces a hallucinated answer, the evaluator scores catch it, the gate fails, the CI report can block deployment, and the trace inspector shows the retrieved context and exact reason.
-
-The next big upgrade is scale proof: capture worker throughput with multiple concurrency levels, add app/suite/run dashboard filters, add repeatable CI smoke logs for Docker, and complete the hand-labeled calibration study.
+Remaining production work is tracked in `docs/project-status.md`.
