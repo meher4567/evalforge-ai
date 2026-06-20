@@ -57,7 +57,7 @@ Why keep the lexical path:
 
 - no paid API dependency
 - fast benchmark
-- simple to inspect and debug
+- easy to explain and audit
 - stable results for CI
 
 Limitation:
@@ -157,4 +157,4 @@ The calibration study is the next major rigor step:
 3. Compare automated evaluator scores against human labels.
 4. Report Pearson, Spearman, confusion matrix, and one named finding.
 
-Until that is complete, calibration numbers should not be published as validated model-quality claims.
+Until that is complete, calibration numbers should be treated as preliminary.

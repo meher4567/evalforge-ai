@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadDashboardSnapshot, type DashboardSnapshot } from "./client";
+import { loadDashboardSnapshot, runDemoEvaluation, type DashboardSnapshot } from "./client";
 import {
   benchmarkSummary,
   gateRules,
@@ -29,6 +29,13 @@ function snapshotWithCaseCount(caseCount: number): DashboardSnapshot {
 function jsonResponse(body: DashboardSnapshot): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function apiResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -77,5 +84,105 @@ describe("loadDashboardSnapshot", () => {
 
     expect(snapshot.benchmarkSummary.caseCount).toBe(benchmarkSummary.caseCount);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("runDemoEvaluation", () => {
+  it("creates a fresh evaluation through the public API and reloads the dashboard", async () => {
+    const latestSnapshot = snapshotWithCaseCount(2);
+    const statusUpdates: string[] = [];
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/apps") return apiResponse({ id: "app-1" }, 201);
+      if (url === "/api/apps/app-1/versions") {
+        const callCount = fetchMock.mock.calls.filter((call) => call[0] === url).length;
+        return apiResponse({ id: callCount === 1 ? "baseline-version" : "candidate-version" }, 201);
+      }
+      if (url === "/api/apps/app-1/suites") return apiResponse({ id: "suite-1" }, 201);
+      if (url === "/api/suites/suite-1/cases/import") return apiResponse({ imported: 2 }, 201);
+      if (url === "/api/evaluator-configs") return apiResponse({ id: "evaluator-config" }, 201);
+      if (url === "/api/runs") {
+        const callCount = fetchMock.mock.calls.filter((call) => call[0] === url).length;
+        return apiResponse(
+          { id: callCount === 1 ? "baseline-run" : "candidate-run", status: "completed" },
+          201,
+        );
+      }
+      if (url === "/api/comparisons") return apiResponse({ id: "comparison-1" }, 201);
+      if (url === "/api/dashboard/latest") return jsonResponse(latestSnapshot);
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await runDemoEvaluation({
+      runLabel: "test-run",
+      onStatus: (message) => statusUpdates.push(message),
+    });
+
+    expect(snapshot.benchmarkSummary.caseCount).toBe(2);
+    expect(statusUpdates).toEqual([
+      "Creating evaluation project",
+      "Running baseline",
+      "Running candidate",
+      "Computing comparison",
+      "Refreshing dashboard",
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/apps",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/comparisons",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          baseline_run_id: "baseline-run",
+          candidate_run_id: "candidate-run",
+        }),
+      }),
+    );
+  });
+
+  it("polls running runs before creating the comparison", async () => {
+    const latestSnapshot = snapshotWithCaseCount(2);
+    const runPolls = new Map([
+      ["baseline-run", ["running", "completed"]],
+      ["candidate-run", ["running", "completed"]],
+    ]);
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/apps") return apiResponse({ id: "app-1" }, 201);
+      if (url === "/api/apps/app-1/versions") {
+        const callCount = fetchMock.mock.calls.filter((call) => call[0] === url).length;
+        return apiResponse({ id: callCount === 1 ? "baseline-version" : "candidate-version" }, 201);
+      }
+      if (url === "/api/apps/app-1/suites") return apiResponse({ id: "suite-1" }, 201);
+      if (url === "/api/suites/suite-1/cases/import") return apiResponse({ imported: 2 }, 201);
+      if (url === "/api/evaluator-configs") return apiResponse({ id: "evaluator-config" }, 201);
+      if (url === "/api/runs") {
+        const callCount = fetchMock.mock.calls.filter((call) => call[0] === url).length;
+        return apiResponse(
+          { id: callCount === 1 ? "baseline-run" : "candidate-run", status: "running" },
+          201,
+        );
+      }
+      if (url.startsWith("/api/runs/")) {
+        const runId = url.replace("/api/runs/", "");
+        const statuses = runPolls.get(runId) ?? ["completed"];
+        const status = statuses.shift() ?? "completed";
+        return apiResponse({ id: runId, status });
+      }
+      if (url === "/api/comparisons") return apiResponse({ id: "comparison-1" }, 201);
+      if (url === "/api/dashboard/latest") return jsonResponse(latestSnapshot);
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runDemoEvaluation({ pollIntervalMs: 0, runLabel: "celery-run" });
+
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/runs/baseline-run")).toBe(true);
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/runs/candidate-run")).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/comparisons",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

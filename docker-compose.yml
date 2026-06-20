@@ -36,7 +36,9 @@ services:
       EVALFORGE_DATABASE_URL: postgresql+asyncpg://evalforge:evalforge@postgres:5432/evalforge
       EVALFORGE_REDIS_URL: redis://redis:6379/0
       EVALFORGE_HEALTH_CHECK_TIMEOUT_SECONDS: "2.0"
-      EVALFORGE_RUN_MODE: sync
+      EVALFORGE_RUN_MODE: celery
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -52,16 +54,18 @@ services:
     command:
       - celery
       - -A
-      - app.workers.celery_app.celery_app
+      - app.workers.celery_app
       - worker
-      - --loglevel=INFO
-      - --concurrency=2
+      - --loglevel=info
+      - --concurrency=4
     environment:
       EVALFORGE_ENVIRONMENT: docker
       EVALFORGE_DATABASE_URL: postgresql+asyncpg://evalforge:evalforge@postgres:5432/evalforge
       EVALFORGE_REDIS_URL: redis://redis:6379/0
       EVALFORGE_HEALTH_CHECK_TIMEOUT_SECONDS: "2.0"
       EVALFORGE_RUN_MODE: celery
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

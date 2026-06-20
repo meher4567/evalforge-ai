@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "benchmarks/worker_throughput.py"
       - "docker-compose.yml"
       - ".github/workflows/docker-smoke.yml"
 
@@ -69,10 +70,10 @@ jobs:
           if echo "$DASHBOARD" | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
-          assert 'gate_verdict' in data, 'Missing gate_verdict'
-          assert 'metrics' in data, 'Missing metrics'
-          assert data.get('gate_verdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gate_verdict: {data.get('gate_verdict')}\"
-          print('Dashboard assertions passed: gateway_verdict=' + str(data.get('gate_verdict')))
+          summary = data.get('benchmarkSummary') or {}
+          assert summary.get('gateVerdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
+          assert isinstance(data.get('metrics'), list) and data['metrics'], 'Missing metrics'
+          print('Dashboard assertions passed: gateVerdict=' + str(summary.get('gateVerdict')))
           "; then
             echo "Dashboard data is valid"
           else
@@ -95,6 +96,24 @@ jobs:
             exit 1
           fi
           echo "Celery worker successfully processed tasks"
+
+      - name: Capture worker throughput artifact
+        run: |
+          python3 benchmarks/worker_throughput.py \
+            --cases 50 \
+            --worker-concurrency 4 \
+            --environment github_actions_docker \
+            --source github_actions_docker_smoke \
+            --skip-seed \
+            --output-dir /tmp/evalforge-worker-throughput
+          echo "=== Worker throughput artifact ==="
+          cat /tmp/evalforge-worker-throughput/worker_throughput.json | python3 -m json.tool
+
+      - name: Upload worker throughput artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-throughput
+          path: /tmp/evalforge-worker-throughput/worker_throughput.json
 
       - name: Diagnostics (success or failure)
         if: always()

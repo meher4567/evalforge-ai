@@ -17,8 +17,8 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 @router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
 async def create_run(payload: RunCreate, session: SessionDep) -> EvalRun:
+    settings = get_settings()
     try:
-        settings = get_settings()
         runner = dispatch_run if settings.run_mode == "celery" else execute_run
         return await runner(
             session,

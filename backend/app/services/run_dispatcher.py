@@ -105,9 +105,10 @@ async def dispatch_run(
 
     await session.commit()
 
-    # Dispatch all tasks as a Celery chord so the run is finalized after workers finish.
+    # Dispatch all tasks as a Celery chord. The immutable callback ignores the
+    # chord result list and receives only run_id.
     if task_signatures:
-        job = chord(task_signatures, check_run_completion.s(run_id=run.id))
+        job = chord(task_signatures, check_run_completion.si(run_id=run.id))
         job.apply_async()
         logger.info(
             "Dispatched %d eval tasks for run=%s",

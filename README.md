@@ -1,136 +1,64 @@
 # EvalForge AI
 
-EvalForge AI is an evaluation and regression testing platform for RAG and LLM applications. It compares a baseline app version against a candidate, runs an eval suite, stores per-case traces, scores outputs with multiple evaluators, and blocks regressions with quality, latency, and cost gates.
+EvalForge AI is an evaluation and regression testing platform for RAG and LLM applications. It compares a baseline app version against a candidate version, runs an evaluation suite, stores per-case traces, scores outputs with configurable evaluators, and reports quality, latency, and cost regressions.
 
 ![EvalForge dashboard](docs/design/phase-5-dashboard-render.png)
 
-## Current Demo Numbers
+## Features
 
-Measured on the deterministic demo benchmark committed in `benchmarks/results/2026-05-31/demo_results.json`:
-
-- 500 eval cases
-- 1000 total case executions
-- 12.162 seconds elapsed
-- 4933.21 cases per minute
-- baseline pass rate: 100%
-- candidate pass rate: 0%
-- candidate token-overlap similarity: 0.284951
-- gate verdict: fail
-
-The committed benchmark is deterministic on purpose. It uses the local demo adapter so CI and local development can reproduce the same numbers. The project also includes a real Groq-backed adapter and an optional live smoke test for external model execution.
-
-Docker/Celery smoke verified on June 16, 2026:
-
-- full Compose stack built and started with PostgreSQL, Redis, FastAPI, Celery worker, and frontend
-- `/healthz` returned `ok` with database and Redis reachable
-- 50-case Celery seed completed baseline 50/50 and candidate 50/50
-- comparison computed and gate verdict failed the intentionally bad candidate
-
-## What Is Implemented
-
-- FastAPI backend with app, version, suite, evaluator config, run, trace, and comparison APIs
-- SQLAlchemy domain model for registry, runs, traces, evaluator results, comparisons, and gold labels
-- deterministic RAG demo adapter
-- Groq/OpenAI-compatible chat adapter for real LLM smoke runs
-- evaluator engine for exact match, keywords, token F1 overlap, embedding similarity, retrieval hit rate, forbidden claims, latency, and cost
-- run executor that stores outputs, traces, evaluator results, and run status
-- Celery dispatcher and worker task path for Redis-backed async execution
-- Docker Compose-verified Celery seed smoke for the worker runtime path
-- Alembic migration baseline for the database schema
-- optional API-key protection for all data APIs
-- bootstrap confidence intervals for comparison metrics
-- gate verdicts across quality, latency, and cost
+- FastAPI backend for apps, versions, suites, cases, runs, traces, comparisons, dashboard snapshots, and CI gate reports
+- React/Vite dashboard for run summaries, metric comparisons, traces, calibration preview, and settings
+- PostgreSQL persistence with Redis-backed Celery worker execution
+- Deterministic RAG demo adapter for repeatable local and CI evaluation
+- Configurable RAG adapter for Ollama or OpenAI-compatible chat completion providers
+- Groq/OpenAI-compatible chat adapter for live smoke tests
+- Evaluators for exact match, keyword coverage, token F1 overlap, embedding similarity, retrieval hit rate, forbidden claims, latency, and cost
+- Bootstrap confidence intervals and configurable gate rules for regression decisions
 - CI/CD deployment gate report API and CLI for JSON/Markdown artifacts
-- dashboard snapshot API at `GET /api/dashboard/demo`
-- database-backed latest dashboard API at `GET /api/dashboard/latest`
-- dashboard comparison selection, failed-case pagination, and per-tag quality breakdowns
-- flaky-eval detection over repeated case scores
-- React/Vite dashboard with overview, run detail, comparison, traces, calibration preview, and settings
-- backend and frontend tests
-- GitHub Actions CI workflow
+- Flaky-eval classification over repeated case scores
+- Docker Compose stack with PostgreSQL, Redis, FastAPI, Celery worker, and nginx-served frontend
+- GitHub Actions workflows for strict CI, dashboard E2E smoke, and Docker/Celery smoke verification
 
-See `docs/project-status.md` for implementation status and remaining operational work.
+## Architecture
 
-## Documentation Map
-
-- `docs/architecture.md`: system architecture, domain model, data flow
-- `docs/api.md`: API reference with request examples
-- `docs/eval-metrics.md`: evaluator logic, bootstrap CIs, gates, flakiness
-- `docs/benchmark-interpretation.md`: benchmark scope and interpretation
-- `docs/project-status.md`: implementation status and remaining work
-
-## Prerequisites
-
-- Python 3.11+
-- `uv`
-- Node.js 22+
-- Docker Desktop, for the full local stack
-
-Install `uv` once if it is not already available:
-
-```powershell
-python -m pip install --user uv
+```text
+React dashboard
+      |
+      v
+FastAPI backend  ---> PostgreSQL
+      |
+      v
+Redis broker  ---> Celery worker
+      |
+      v
+App adapter + evaluator engine
 ```
 
-If PowerShell cannot find `uv` after installation, add this folder to your PATH:
+The backend can run evaluations synchronously for local development and through Celery workers for the Docker path. The worker executes individual eval cases, stores traces and evaluator results, and updates run status when the Celery chord completes.
 
-```powershell
-python -m site --user-base
-```
+The dashboard can launch a small evaluation through the public API. It creates an app, versions, suite, cases, evaluator config, runs both versions, waits for completion, computes the comparison, and refreshes the latest dashboard snapshot.
 
-On Windows, the `uv.exe` script is usually in the `Scripts` folder inside that user-base path.
+## Tech Stack
 
-## Local Backend Setup
+- Backend: FastAPI, SQLAlchemy, Pydantic, Celery, Redis, PostgreSQL/pgvector
+- Frontend: React, TypeScript, Vite, Vitest, Playwright
+- Evaluation: deterministic RAG adapter, OpenAI-compatible adapter, bootstrap statistics, regression gates
+- Infrastructure: Docker Compose, GitHub Actions
 
-Install Python dependencies:
+## Quick Start
+
+Backend:
 
 ```powershell
 uv sync --directory backend
-```
-
-Run tests:
-
-```powershell
-uv run --directory backend pytest -v
-```
-
-Run linting:
-
-```powershell
-uv run --directory backend ruff check .
-```
-
-Run formatting check:
-
-```powershell
-uv run --directory backend ruff format --check .
-```
-
-Start the backend locally without Docker:
-
-```powershell
+uv run --directory backend pytest
 uv run --directory backend uvicorn app.main:app --reload
 ```
 
-When running the backend without PostgreSQL and Redis, `/healthz` should return `degraded`. That still proves the API is alive. The full Docker Compose stack should return `ok`.
-
-## Local Frontend Setup
-
-Install frontend dependencies:
+Frontend:
 
 ```powershell
 npm install --prefix frontend
-```
-
-Run frontend tests:
-
-```powershell
-npm test --prefix frontend
-```
-
-Run the frontend locally:
-
-```powershell
 npm run dev --prefix frontend
 ```
 
@@ -140,150 +68,82 @@ Open:
 http://127.0.0.1:5173
 ```
 
-Build the frontend:
-
-```powershell
-npm run build --prefix frontend
-```
-
-## Benchmark Demo
-
-Run the deterministic 500-case benchmark:
-
-```powershell
-uv run --directory backend python ../benchmarks/run_demo.py --cases 500
-```
-
-The script writes a JSON result under:
-
-```text
-benchmarks/results/YYYY-MM-DD/demo_results.json
-```
-
-The committed reference result is:
-
-```text
-benchmarks/results/2026-05-31/demo_results.json
-```
-
-Run the deterministic flaky-eval benchmark:
-
-```powershell
-uv run --directory backend python ../benchmarks/flaky_eval.py
-```
-
-The committed flaky-eval result is:
-
-```text
-benchmarks/results/2026-05-31/flaky_eval_results.json
-```
-
-## Real LLM Smoke
-
-Put a Groq key in `backend/.env`:
-
-```env
-GROQ_API_KEY=...
-EVALFORGE_LLM_PROVIDER=groq
-EVALFORGE_LLM_MODEL=llama-3.1-8b-instant
-EVALFORGE_LLM_BASE_URL=https://api.groq.com/openai/v1
-```
-
-Run the live smoke test only when you intentionally want to spend free-tier quota:
-
-```powershell
-$env:EVALFORGE_RUN_LIVE_LLM_TESTS="1"
-uv run --directory backend pytest tests/test_live_groq_integration.py -q
-```
-
-The test is skipped by default in normal CI.
-
-## Database Migrations
-
-Inspect the Alembic baseline:
-
-```powershell
-uv run --directory backend alembic -c alembic.ini history
-```
-
-Run migrations against the configured database:
-
-```powershell
-uv run --directory backend alembic -c alembic.ini upgrade head
-```
-
-For a real Postgres-backed API integration test, set a scratch database URL:
-
-```powershell
-$env:EVALFORGE_TEST_DATABASE_URL="postgresql+asyncpg://evalforge:evalforge@localhost:5432/evalforge_test"
-uv run --directory backend pytest tests/test_postgres_integration.py -q
-```
-
-## Optional API Auth
-
-By default local APIs are open. Set `EVALFORGE_API_KEY` to require `X-EvalForge-Api-Key` or `Authorization: Bearer ...` for all `/api/*` routes. `/healthz` remains public.
-
-## Full Verification
-
-Backend:
-
-```powershell
-uv run --directory backend pytest
-uv run --directory backend ruff check .
-uv run --directory backend ruff format --check .
-```
-
-Frontend:
-
-```powershell
-npm run lint --prefix frontend
-npm test --prefix frontend
-npm run build --prefix frontend
-npm audit --prefix frontend
-```
-
 ## Docker Compose
 
-Start PostgreSQL, Redis, the backend, Celery worker, and the frontend:
+Start the full stack:
 
 ```powershell
 docker compose up --build
 ```
 
-Check platform health:
+Check health:
 
 ```powershell
-Invoke-RestMethod http://localhost:8000/healthz
+curl http://localhost:8000/healthz
 ```
 
-Expected healthy response:
+Seed demo data through Celery worker mode:
+
+```powershell
+docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
+```
+
+Query the latest dashboard snapshot:
+
+```powershell
+curl http://localhost:8000/api/dashboard/latest
+```
+
+Run against a local Ollama model by creating an app version with `adapter_module` set to `app.adapters.llm_rag`:
 
 ```json
 {
-  "status": "ok",
-  "api": true,
-  "database": true,
-  "redis": true
+  "name": "ollama-baseline",
+  "adapter_module": "app.adapters.llm_rag",
+  "config": {
+    "provider": "ollama",
+    "base_url": "http://host.docker.internal:11434",
+    "model": "llama3.2:3b",
+    "top_k": 3,
+    "corpus": [
+      {
+        "doc_id": "python-venv",
+        "text": "The venv module creates lightweight Python virtual environments."
+      }
+    ]
+  }
 }
 ```
 
-Open the frontend:
+For Groq, OpenAI, or another OpenAI-compatible endpoint, use `provider: "openai_compatible"` and set `api_key_env` to the environment variable that holds the API key.
 
-```text
-http://localhost:5173
-```
-
-Run the worker smoke path through Celery:
+Stop and remove local volumes:
 
 ```powershell
-docker compose exec -T backend uv run python -m app.cli.seed --mode celery --cases 50
+docker compose down -v
 ```
 
-Expected result: both baseline and candidate runs finish with `completed=50 errored=0`, then the comparison gate fails the intentionally degraded candidate.
+## CLI Usage
 
-## CI/CD Gate Report
+Seed a deterministic demo project in synchronous mode:
 
-After a comparison is computed, CI can fetch a deployment gate artifact and fail the pipeline when the candidate regresses:
+```powershell
+uv run --directory backend python -m app.cli.seed --mode sync --cases 50
+```
+
+Run a baseline/candidate comparison by suite and version name:
+
+```powershell
+uv run --directory backend python -m app.cli.run `
+  --suite demo-suite `
+  --baseline v1_baseline `
+  --candidate v2_candidate `
+  --sync
+```
+
+In Docker/Celery mode, omit `--sync` and let the CLI dispatch worker tasks and poll until the runs complete.
+
+After a comparison is computed, fetch a CI/CD gate artifact:
 
 ```powershell
 uv run --directory backend python -m app.cli.gate `
@@ -294,10 +154,54 @@ uv run --directory backend python -m app.cli.gate `
   --markdown-out gate-report.md
 ```
 
-The command exits `1` when the gate verdict is `fail`, writes machine-readable JSON, and writes a Markdown summary suitable for a GitHub step summary or PR comment. Add `--fail-on-warn` when warning verdicts should block deploys too.
+The gate command exits `1` when the verdict is `fail`. Add `--fail-on-warn` when warning verdicts should block release pipelines.
 
-## Operational Scope
+## Verification
 
-EvalForge can run deterministic RAG regression benchmarks, call a real Groq-compatible model through an adapter, persist traces and evaluator results, compute comparison metrics with confidence intervals, protect APIs with an optional key, migrate the schema with Alembic, execute worker jobs through Docker Compose and Celery, emit CI/CD deployment gate artifacts, and surface failed-case evidence in the dashboard.
+Backend:
 
-Remaining production work is tracked in `docs/project-status.md`.
+```powershell
+uv run --directory backend ruff check .
+uv run --directory backend ruff format --check .
+uv run --directory backend pytest
+```
+
+Frontend:
+
+```powershell
+npm run lint --prefix frontend
+npm test --prefix frontend
+npm run test:e2e --prefix frontend
+npm run build --prefix frontend
+```
+
+Docker/Celery smoke:
+
+```powershell
+docker compose up --build -d
+docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
+curl http://localhost:8000/api/dashboard/latest
+docker compose logs worker --tail 100
+docker compose down -v
+```
+
+Measured worker throughput:
+
+```powershell
+python benchmarks/worker_throughput.py --cases 50 --worker-concurrency 4
+```
+
+The current Docker/Celery smoke benchmark is recorded in [benchmarks/results/2026-06-03/worker_throughput.json](benchmarks/results/2026-06-03/worker_throughput.json). On a local Docker Desktop run, the worker path completed 50 baseline cases and 50 candidate cases with concurrency 4 in 2.017 seconds, or 2,974.71 case executions per minute. This is a deterministic demo workload measurement, not a production throughput claim.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [API reference](docs/api.md)
+- [Evaluation metrics](docs/eval-metrics.md)
+- [Calibration labeling rubric](docs/labeling_rubric.md)
+
+## Limitations
+
+- The default semantic similarity evaluator is deterministic and lightweight; it is not a replacement for a production embedding or judge model.
+- The included adapter and benchmark are deterministic demo assets, intended for reproducible testing.
+- The committed throughput artifact measures the Docker/Celery smoke path only. Production capacity depends on model latency, worker sizing, and deployment hardware.
