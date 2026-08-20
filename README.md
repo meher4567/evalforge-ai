@@ -202,6 +202,7 @@ The current Docker/Celery smoke benchmark is recorded in [benchmarks/results/202
 
 ## Documentation
 
+- [Production launch and 90+ completion plan](docs/production-launch-and-90-plus-plan.md)
 - [Architecture](docs/architecture.md)
 - [API reference](docs/api.md)
 - [Evaluation metrics](docs/eval-metrics.md)

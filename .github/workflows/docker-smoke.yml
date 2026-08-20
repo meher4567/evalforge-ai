@@ -4,11 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    paths:
-      - "backend/**"
-      - "benchmarks/worker_throughput.py"
-      - "docker-compose.yml"
-      - ".github/workflows/docker-smoke.yml"
 
 jobs:
   docker-smoke:
