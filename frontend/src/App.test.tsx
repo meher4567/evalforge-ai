@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { setSessionApiKey } from "./api/client";
 import {
   benchmarkSummary,
   gateRules,
@@ -24,11 +25,12 @@ const demoSnapshot = {
 };
 
 beforeEach(() => {
+  setSessionApiKey("");
   vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(demoSnapshot)));
 });
 
 afterEach(() => {
-  window.sessionStorage.clear();
+  setSessionApiKey("");
   vi.unstubAllGlobals();
 });
 

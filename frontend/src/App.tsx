@@ -420,7 +420,7 @@ function DashboardState({
             <button className="secondary-action" type="submit" disabled={!apiKey.trim()}>
               Use credential
             </button>
-            <small>Credentials are kept in this browser tab only.</small>
+            <small>Credentials stay in memory and are cleared when the page refreshes.</small>
           </form>
         </div>
       )}

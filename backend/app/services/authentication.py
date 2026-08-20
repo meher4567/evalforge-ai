@@ -69,10 +69,14 @@ def new_api_key() -> tuple[str, str, str]:
 
 
 def hash_token(token: str) -> str:
-    return hmac.new(
+    pepper_key = hashlib.blake2b(
         get_settings().auth_token_pepper.encode(),
+        digest_size=32,
+    ).digest()
+    return hashlib.blake2b(
         token.encode(),
-        hashlib.sha256,
+        key=pepper_key,
+        digest_size=32,
     ).hexdigest()
 
 

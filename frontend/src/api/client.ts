@@ -54,15 +54,10 @@ interface LoginResponse {
   user: { id: string; email: string; display_name: string };
 }
 
-const API_KEY_SESSION_KEY = "evalforge.api-key";
+let inMemoryApiKey = "";
 
 export function setSessionApiKey(apiKey: string): void {
-  const normalized = apiKey.trim();
-  if (normalized) {
-    window.sessionStorage.setItem(API_KEY_SESSION_KEY, normalized);
-  } else {
-    window.sessionStorage.removeItem(API_KEY_SESSION_KEY);
-  }
+  inMemoryApiKey = apiKey.trim();
 }
 
 export async function login({
@@ -338,6 +333,5 @@ function errorMessage(error: unknown): string {
 }
 
 function sessionAuthHeaders(): Record<string, string> {
-  const apiKey = window.sessionStorage.getItem(API_KEY_SESSION_KEY);
-  return apiKey ? { "X-EvalForge-Api-Key": apiKey } : {};
+  return inMemoryApiKey ? { "X-EvalForge-Api-Key": inMemoryApiKey } : {};
 }

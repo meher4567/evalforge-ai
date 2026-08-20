@@ -29,11 +29,12 @@ secret after initial setup.
 ## Credentials
 
 - Passwords are salted and hashed with scrypt; plaintext passwords are never stored.
-- Login sessions and personal API keys are opaque random values. Only peppered HMAC-SHA-256
-  digests are stored. The plaintext API key is returned once.
+- Login sessions and personal API keys are opaque random values. Only keyed BLAKE2b fingerprints
+  are stored. The plaintext API key is returned once.
 - Send a session or API key as `Authorization: Bearer <token>` or
   `X-EvalForge-API-Key: <token>`.
-- Browser sessions use `sessionStorage`, so closing the tab removes the local credential.
+- Browser credentials are memory-only and are never written to local or session storage. Refreshing
+  or closing the page removes the credential.
 - Password changes revoke the user's other active login sessions.
 - Five failed password attempts lock the account for 15 minutes. Invalid-user checks still execute
   the password hash path to reduce account-enumeration timing differences.

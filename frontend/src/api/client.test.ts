@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { login, loadDashboardSnapshot, runDemoEvaluation, type DashboardSnapshot } from "./client";
+import {
+  login,
+  loadDashboardSnapshot,
+  runDemoEvaluation,
+  setSessionApiKey,
+  type DashboardSnapshot,
+} from "./client";
 import {
   benchmarkSummary,
   gateRules,
@@ -43,7 +49,7 @@ function apiResponse(body: unknown, status = 200): Response {
 }
 
 afterEach(() => {
-  window.sessionStorage.clear();
+  setSessionApiKey("");
   vi.unstubAllGlobals();
 });
 
@@ -102,15 +108,21 @@ describe("loadDashboardSnapshot", () => {
 });
 
 describe("login", () => {
-  it("stores an organization-scoped session token only for the current tab", async () => {
-    const fetchMock = vi.fn(async () =>
-      apiResponse({
-        access_token: "efs_session-token",
-        role: "evaluator",
-        organization: { id: "org-1", name: "Alpha", slug: "alpha" },
-        user: { id: "user-1", email: "user@example.com", display_name: "User" },
-      }),
-    );
+  it("keeps the organization-scoped session token in memory only", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/auth/login") {
+        return apiResponse({
+          access_token: "efs_session-token",
+          role: "evaluator",
+          organization: { id: "org-1", name: "Alpha", slug: "alpha" },
+          user: { id: "user-1", email: "user@example.com", display_name: "User" },
+        });
+      }
+      if (url === "/api/dashboard/latest") {
+        return jsonResponse(snapshotWithCaseCount(1));
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const principal = await login({
@@ -120,7 +132,8 @@ describe("login", () => {
     });
 
     expect(principal.role).toBe("evaluator");
-    expect(window.sessionStorage.getItem("evalforge.api-key")).toBe("efs_session-token");
+    expect(window.sessionStorage.length).toBe(0);
+    await loadDashboardSnapshot("", false);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/login",
       expect.objectContaining({
@@ -132,6 +145,9 @@ describe("login", () => {
         }),
       }),
     );
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/latest", {
+      headers: { "X-EvalForge-Api-Key": "efs_session-token" },
+    });
   });
 });
 
