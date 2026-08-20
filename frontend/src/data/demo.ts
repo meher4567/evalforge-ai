@@ -27,7 +27,7 @@ export interface MetricSummary {
   deltaCi: [number, number];
   direction: MetricDirection;
   tolerance: number;
-  status: "pass" | "warn" | "fail";
+  status: "pass" | "warn" | "fail" | "not_evaluated";
 }
 
 export interface RunRow {
@@ -35,12 +35,14 @@ export interface RunRow {
   version: string;
   suite: string;
   cases: number;
+  caseCompleted: number;
+  caseErrored: number;
   passRate: number;
   semanticSimilarity: number;
   p95LatencyMs: number;
   costMeanUsd: number;
   createdAt: string;
-  status: "completed" | "partial" | "running";
+  status: "completed" | "partial" | "running" | "failed" | "cancelled" | "timed_out";
 }
 
 export interface RetrievedChunk {
@@ -65,6 +67,7 @@ export interface TraceCase {
   latencyMs: number;
   costUsd: number;
   chunks: RetrievedChunk[];
+  adapter?: string;
 }
 
 export interface TracePagination {
@@ -104,16 +107,33 @@ export interface GateRule {
   verdict: "pass" | "warn" | "fail";
 }
 
-export const benchmarkSummary = {
+export interface BenchmarkSummary {
+  generatedAt: string;
+  benchmark: string;
+  projectName?: string;
+  suiteName?: string;
+  baselineVersion?: string;
+  candidateVersion?: string;
+  reproductionCommand?: string;
+  caseCount: number;
+  totalExecutions: number;
+  elapsedSeconds: number;
+  casesPerMinute: number;
+  gateVerdict: "pass" | "warn" | "fail";
+}
+
+export const benchmarkSummary: BenchmarkSummary = {
   generatedAt: "2026-05-31T12:30:56Z",
   benchmark: "deterministic_demo_rag_regression",
+  projectName: "Demo RAG QA",
+  suiteName: "demo_rag_500",
   reproductionCommand:
     "uv run --directory backend python ../benchmarks/run_demo.py --cases 500",
   caseCount: 500,
   totalExecutions: 1000,
   elapsedSeconds: 12.162,
   casesPerMinute: 4933.21,
-  gateVerdict: "fail" as const,
+  gateVerdict: "fail",
 };
 
 export const metrics: MetricSummary[] = [
@@ -185,6 +205,8 @@ export const runs: RunRow[] = [
     version: "v2_candidate_hallucination_injected",
     suite: "demo_rag_500",
     cases: 500,
+    caseCompleted: 500,
+    caseErrored: 0,
     passRate: 0,
     semanticSimilarity: 0.284951,
     p95LatencyMs: 260,
@@ -197,6 +219,8 @@ export const runs: RunRow[] = [
     version: "v1_baseline_bge_top3",
     suite: "demo_rag_500",
     cases: 500,
+    caseCompleted: 500,
+    caseErrored: 0,
     passRate: 1,
     semanticSimilarity: 1,
     p95LatencyMs: 120,
@@ -209,6 +233,8 @@ export const runs: RunRow[] = [
     version: "v3_prompt_rewrite_preview",
     suite: "demo_rag_100",
     cases: 100,
+    caseCompleted: 100,
+    caseErrored: 0,
     passRate: 0.94,
     semanticSimilarity: 0.91,
     p95LatencyMs: 188,
@@ -221,6 +247,8 @@ export const runs: RunRow[] = [
     version: "v1_baseline_rerun_n5",
     suite: "flaky_subset_50",
     cases: 250,
+    caseCompleted: 246,
+    caseErrored: 4,
     passRate: 0.972,
     semanticSimilarity: 0.956,
     p95LatencyMs: 142,

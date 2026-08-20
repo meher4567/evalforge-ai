@@ -86,7 +86,7 @@ button {
 }
 
 .nav-item,
-.sidebar-footer button,
+.sidebar-footer a,
 .sidebar-card button {
   display: flex;
   align-items: center;
@@ -102,10 +102,11 @@ button {
   line-height: 1.2;
   padding: 11px 12px;
   text-align: left;
+  text-decoration: none;
 }
 
 .nav-item:hover,
-.sidebar-footer button:hover {
+.sidebar-footer a:hover {
   background: #eef4ff;
   color: #0f4fd8;
 }
@@ -324,6 +325,10 @@ button {
   color: var(--amber);
 }
 
+.metric-card__value--not_evaluated {
+  color: var(--ink);
+}
+
 .metric-card__delta {
   color: var(--muted);
   font-size: 12px;
@@ -379,6 +384,92 @@ button {
 .status-pill--fail {
   background: var(--red-soft);
   color: var(--red);
+}
+
+.status-pill--failed {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.status-pill--cancelled,
+.status-pill--timed_out {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.status-pill--not_evaluated {
+  background: #edf1f6;
+  color: var(--muted);
+}
+
+.source-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
+.source-chip--live {
+  border-color: #9bd3ad;
+  background: var(--green-soft);
+  color: var(--green) !important;
+}
+
+.source-chip--demo {
+  border-color: #e2bd66;
+  background: var(--amber-soft);
+  color: var(--amber) !important;
+}
+
+.dashboard-state,
+.empty-state {
+  display: grid;
+  max-width: 760px;
+  justify-items: start;
+  gap: 12px;
+  padding: 28px;
+}
+
+.dashboard-state h1,
+.empty-state h2,
+.dashboard-state p,
+.empty-state p {
+  margin: 0;
+}
+
+.trace-inspector--empty {
+  min-height: 180px;
+}
+
+.authentication-form {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 9px;
+}
+
+.authentication-options {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 14px;
+}
+
+.authentication-divider {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.authentication-form label,
+.authentication-form small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.authentication-form input {
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .status-pill--pass,
@@ -515,6 +606,10 @@ button {
 
 .bar-track__fill--warn {
   background: #d88919;
+}
+
+.bar-track__fill--not_evaluated {
+  background: #7a8798;
 }
 
 .comparison-row__values {
@@ -906,7 +1001,7 @@ svg text {
   }
 
   .nav-item,
-  .sidebar-footer button {
+  .sidebar-footer a {
     justify-content: center;
   }
 

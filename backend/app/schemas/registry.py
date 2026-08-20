@@ -90,3 +90,28 @@ class EvaluatorConfigRead(BaseModel):
     name: str
     config: dict[str, Any]
     created_at: datetime
+
+
+class GateRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    rules: dict[str, dict[str, Any]]
+
+
+class GateRuleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    rules: dict[str, dict[str, Any]]
+    created_at: datetime
+
+
+class EvaluatorCapabilityRead(BaseModel):
+    name: str
+    category: str
+    deterministic: bool
+    available: bool
+    missing_modules: list[str]
+    dependency_group: str | None = None
+    deprecated: bool = False
+    alias_for: str | None = None

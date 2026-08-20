@@ -3,6 +3,7 @@
 from app.models.entities import (
     App,
     AppVersion,
+    AuthSession,
     Comparison,
     EvalCase,
     EvalResult,
@@ -13,13 +14,19 @@ from app.models.entities import (
     EvaluatorConfig,
     GateRule,
     GoldLabel,
+    Membership,
+    OidcIdentity,
+    Organization,
+    PersonalApiKey,
     RegressionReport,
     Trace,
+    User,
 )
 
 __all__ = [
     "App",
     "AppVersion",
+    "AuthSession",
     "Comparison",
     "EvalCase",
     "EvalResult",
@@ -30,6 +37,11 @@ __all__ = [
     "EvaluatorConfig",
     "GateRule",
     "GoldLabel",
+    "Membership",
+    "OidcIdentity",
+    "Organization",
+    "PersonalApiKey",
     "RegressionReport",
     "Trace",
+    "User",
 ]

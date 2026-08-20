@@ -4,6 +4,8 @@ Unit tests for comparison gate logic and regression report generation.
 Covers: DEFAULT_GATE_RULES, apply_gates, build_metric_report, collect_run_metric_samples
 """
 
+import pytest
+
 from app.services.comparison import (
     DEFAULT_GATE_RULES,
     apply_gates,
@@ -68,6 +70,17 @@ class TestBuildMetricReport:
         for metric_data in report.values():
             assert metric_data["baseline_point"] == 0.0
             assert metric_data["candidate_point"] == 0.0
+
+    def test_mapping_samples_are_paired_by_case_id(self):
+        baseline = {"pass_rate": {"case-a": 1.0, "case-b": 0.0, "baseline-only": 1.0}}
+        candidate = {"pass_rate": {"case-b": 1.0, "case-a": 0.0, "candidate-only": 0.0}}
+
+        report = build_metric_report(baseline, candidate)["pass_rate"]
+
+        assert report["baseline_sample_count"] == 3
+        assert report["candidate_sample_count"] == 3
+        assert report["paired_sample_count"] == 2
+        assert report["delta_point"] == pytest.approx(-1 / 3)
 
 
 class TestApplyGates:

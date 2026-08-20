@@ -8,22 +8,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    App,
     AppVersion,
     Comparison,
     EvalCase,
     EvalResult,
     EvalRun,
     EvalRunItem,
+    EvalSuite,
     GateRule,
     RegressionReport,
     Trace,
 )
+from app.services.statistics import percentile
 
 METRIC_SPECS = [
-    ("pass_rate", "Pass rate", "Pass", "%", "higher", 0.02),
-    ("semantic_similarity", "Token overlap", "Overlap", "score", "higher", 0.02),
-    ("p95_latency_ms", "p95 latency", "p95", "ms", "lower", 50.0),
-    ("cost_mean_usd", "Mean cost", "Cost", "usd", "lower", 0.2),
+    ("pass_rate", "Pass rate", "Pass", "%", "higher"),
+    ("semantic_similarity", "Token overlap", "Overlap", "score", "higher"),
+    ("p95_latency_ms", "p95 latency", "p95", "ms", "lower"),
+    ("cost_mean_usd", "Mean cost", "Cost", "usd", "lower"),
 ]
 
 
@@ -33,8 +36,9 @@ async def build_latest_dashboard_snapshot(
     comparison_id: str | None = None,
     failure_limit: int = 50,
     failure_offset: int = 0,
+    organization_id: str = "00000000-0000-0000-0000-000000000001",
 ) -> dict[str, Any] | None:
-    comparison = await _load_comparison(session, comparison_id)
+    comparison = await _load_comparison(session, comparison_id, organization_id)
     if comparison is None:
         return None
 
@@ -46,13 +50,17 @@ async def build_latest_dashboard_snapshot(
     candidate = await session.get(EvalRun, comparison.candidate_run_id)
     if baseline is None or candidate is None:
         return None
+    gate_rule = await session.get(GateRule, comparison.gate_rules_id)
+    gate_rules = gate_rule.rules if gate_rule is not None else {}
 
     trace_cases = await _build_trace_cases(session, baseline, candidate)
     paginated_trace_cases = trace_cases[failure_offset : failure_offset + failure_limit]
 
     return {
+        "dataSource": "live",
+        "comparisonId": comparison.id,
         "benchmarkSummary": await _build_summary(session, baseline, candidate, report),
-        "metrics": _build_metrics(report.metrics, report.gate_reasons),
+        "metrics": _build_metrics(report.metrics, report.gate_reasons, gate_rules),
         "runs": await _build_runs(session, baseline, candidate),
         "traceCases": paginated_trace_cases,
         "tracePagination": {
@@ -73,13 +81,22 @@ async def build_latest_dashboard_snapshot(
 async def _load_comparison(
     session: AsyncSession,
     comparison_id: str | None,
+    organization_id: str,
 ) -> Comparison | None:
     if comparison_id is not None:
-        return await session.get(Comparison, comparison_id)
+        return await session.scalar(
+            select(Comparison).where(
+                Comparison.id == comparison_id,
+                Comparison.organization_id == organization_id,
+            )
+        )
 
     return await session.scalar(
         select(Comparison)
-        .where(Comparison.status == "computed")
+        .where(
+            Comparison.status == "computed",
+            Comparison.organization_id == organization_id,
+        )
         .order_by(Comparison.created_at.desc())
         .limit(1)
     )
@@ -99,12 +116,16 @@ async def _build_summary(
 ) -> dict[str, Any]:
     baseline_version = await session.get(AppVersion, baseline.app_version_id)
     candidate_version = await session.get(AppVersion, candidate.app_version_id)
+    suite = await session.get(EvalSuite, candidate.suite_id)
+    app = await session.get(App, candidate_version.app_id) if candidate_version else None
     elapsed_seconds = _elapsed_seconds(baseline, candidate)
     total_executions = baseline.case_completed + candidate.case_completed
 
     return {
         "generatedAt": report.created_at.isoformat(),
         "benchmark": "latest_persisted_comparison",
+        "projectName": app.name if app else "Unknown app",
+        "suiteName": suite.name if suite else candidate.suite_id,
         "baselineVersion": baseline_version.name if baseline_version else baseline.app_version_id,
         "candidateVersion": (
             candidate_version.name if candidate_version else candidate.app_version_id
@@ -138,8 +159,9 @@ def _cases_per_minute(total_executions: int, elapsed_seconds: float) -> float:
 def _build_metrics(
     metrics: dict[str, Any],
     gate_reasons: list[dict[str, Any]],
+    gate_rules: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    failing_metrics = {reason["metric"] for reason in gate_reasons}
+    verdicts_by_metric = {str(reason["metric"]): str(reason["verdict"]) for reason in gate_reasons}
     return [
         {
             "key": key,
@@ -162,10 +184,13 @@ def _build_metrics(
                 _as_float(metrics[key]["delta_ci_upper"]),
             ],
             "direction": direction,
-            "tolerance": tolerance,
-            "status": "fail" if key in failing_metrics else "pass",
+            "tolerance": _as_float(gate_rules.get(key, {}).get("tolerance", 0.0)),
+            "status": (
+                verdicts_by_metric.get(key, "pass") if key in gate_rules else "not_evaluated"
+            ),
         }
-        for key, label, short_label, unit, direction, tolerance in METRIC_SPECS
+        for key, label, short_label, unit, direction in METRIC_SPECS
+        if key in metrics
     ]
 
 
@@ -182,15 +207,18 @@ async def _build_runs(
 
 async def _run_to_dashboard_row(session: AsyncSession, run: EvalRun) -> dict[str, Any]:
     version = await session.get(AppVersion, run.app_version_id)
+    suite = await session.get(EvalSuite, run.suite_id)
     samples = await _collect_run_display_samples(session, run.id)
     return {
         "id": run.id,
         "version": version.name if version else run.app_version_id,
-        "suite": run.suite_id,
+        "suite": suite.name if suite else run.suite_id,
         "cases": run.case_count,
+        "caseCompleted": run.case_completed,
+        "caseErrored": run.case_errored,
         "passRate": _average(samples["case_passes"]),
         "semanticSimilarity": _average(samples["semantic_scores"]),
-        "p95LatencyMs": max(samples["latencies"], default=0.0),
+        "p95LatencyMs": percentile(samples["latencies"], 0.95),
         "costMeanUsd": _average(samples["costs"]),
         "createdAt": run.created_at.isoformat(),
         "status": run.status,
@@ -208,17 +236,21 @@ async def _collect_run_display_samples(
         "costs": [],
     }
     items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
+    results_by_item = await _load_results_by_item(session, [item.id for item in items])
     for item in items:
-        results = list(
-            await session.scalars(select(EvalResult).where(EvalResult.run_item_id == item.id))
-        )
+        results = results_by_item.get(item.id, [])
         applicable = [
             result
             for result in results
             if not result.skipped and not result.errored and result.passed is not None
         ]
+        has_evaluator_error = any(result.errored for result in results)
         samples["case_passes"].append(
-            1.0 if applicable and all(result.passed for result in applicable) else 0.0
+            1.0
+            if applicable
+            and not has_evaluator_error
+            and all(result.passed for result in applicable)
+            else 0.0
         )
         semantic = _find_first_result(results, ["token_f1_overlap", "semantic_similarity"])
         if semantic and semantic.score is not None:
@@ -243,22 +275,53 @@ async def _build_trace_cases(
             .order_by(EvalRunItem.case_id)
         )
     )
+    results_by_item = await _load_results_by_item(session, [item.id for item in candidate_items])
+    failed_by_item: dict[str, EvalResult | None] = {}
+    for item in candidate_items:
+        failed = [
+            result
+            for result in results_by_item.get(item.id, [])
+            if (result.passed is False or result.errored) and not result.skipped
+        ]
+        if failed:
+            failed_by_item[item.id] = failed[0]
+        elif item.status in {"errored", "timed_out", "cancelled"}:
+            failed_by_item[item.id] = None
+
+    failed_items = [item for item in candidate_items if item.id in failed_by_item]
+    if not failed_items:
+        return []
+
+    cases = list(
+        await session.scalars(
+            select(EvalCase).where(EvalCase.id.in_([item.case_id for item in failed_items]))
+        )
+    )
+    cases_by_id = {case.id: case for case in cases}
+    baseline_item_ids = [
+        baseline_by_case[item.case_id].id
+        for item in failed_items
+        if item.case_id in baseline_by_case
+    ]
+    traces = list(
+        await session.scalars(
+            select(Trace).where(
+                Trace.run_item_id.in_([item.id for item in failed_items] + baseline_item_ids)
+            )
+        )
+    )
+    traces_by_item = {trace.run_item_id: trace for trace in traces}
+    candidate_version = await session.get(AppVersion, candidate.app_version_id)
+    adapter_module = candidate_version.adapter_module if candidate_version else "unknown"
 
     trace_cases: list[dict[str, Any]] = []
-    for item in candidate_items:
-        results = list(
-            await session.scalars(select(EvalResult).where(EvalResult.run_item_id == item.id))
-        )
-        failed_results = [
-            result for result in results if result.passed is False and not result.skipped
-        ]
-        if not failed_results:
-            continue
-
-        case = await session.get(EvalCase, item.case_id)
-        trace = await _load_trace(session, item.id)
-        baseline_trace = await _load_trace_for_item(session, baseline_by_case.get(item.case_id))
-        if case is None or trace is None:
+    for item in failed_items:
+        results = results_by_item.get(item.id, [])
+        case = cases_by_id.get(item.case_id)
+        trace = traces_by_item.get(item.id)
+        baseline_item = baseline_by_case.get(item.case_id)
+        baseline_trace = traces_by_item.get(baseline_item.id) if baseline_item else None
+        if case is None:
             continue
 
         trace_cases.append(
@@ -268,7 +331,8 @@ async def _build_trace_cases(
                 trace=trace,
                 baseline_trace=baseline_trace,
                 results=results,
-                failed_result=failed_results[0],
+                failed_result=failed_by_item[item.id],
+                adapter_module=adapter_module,
             )
         )
 
@@ -280,9 +344,8 @@ async def _build_tag_breakdown(
     baseline: EvalRun,
     candidate: EvalRun,
 ) -> list[dict[str, Any]]:
-    baseline_counts = await _run_case_counts_by_tag(session, baseline.id)
-    candidate_counts = await _run_case_counts_by_tag(session, candidate.id)
-    candidate_failures = await _run_failure_counts_by_tag(session, candidate.id)
+    baseline_counts, _baseline_failures = await _run_tag_stats(session, baseline.id)
+    candidate_counts, candidate_failures = await _run_tag_stats(session, candidate.id)
     tags = sorted(set(baseline_counts) | set(candidate_counts) | set(candidate_failures))
 
     breakdown = []
@@ -301,36 +364,31 @@ async def _build_tag_breakdown(
     return breakdown
 
 
-async def _run_case_counts_by_tag(session: AsyncSession, run_id: str) -> dict[str, int]:
+async def _run_tag_stats(
+    session: AsyncSession, run_id: str
+) -> tuple[dict[str, int], dict[str, int]]:
     counts: dict[str, int] = {}
+    failures: dict[str, int] = {}
     items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
+    cases = list(
+        await session.scalars(
+            select(EvalCase).where(EvalCase.id.in_([item.case_id for item in items]))
+        )
+    )
+    cases_by_id = {case.id: case for case in cases}
+    results_by_item = await _load_results_by_item(session, [item.id for item in items])
     for item in items:
-        case = await session.get(EvalCase, item.case_id)
+        case = cases_by_id.get(item.case_id)
         if case is None:
             continue
         tag = _first_tag(case.payload)
         counts[tag] = counts.get(tag, 0) + 1
-    return counts
-
-
-async def _run_failure_counts_by_tag(session: AsyncSession, run_id: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    items = list(await session.scalars(select(EvalRunItem).where(EvalRunItem.run_id == run_id)))
-    for item in items:
-        case = await session.get(EvalCase, item.case_id)
-        if case is None:
-            continue
-        if await _run_item_has_failure(session, item.id):
-            tag = _first_tag(case.payload)
-            counts[tag] = counts.get(tag, 0) + 1
-    return counts
-
-
-async def _run_item_has_failure(session: AsyncSession, run_item_id: str) -> bool:
-    results = list(
-        await session.scalars(select(EvalResult).where(EvalResult.run_item_id == run_item_id))
-    )
-    return any(result.passed is False and not result.skipped for result in results)
+        if any(
+            (result.passed is False or result.errored) and not result.skipped
+            for result in results_by_item.get(item.id, [])
+        ) or item.status in {"errored", "timed_out", "cancelled"}:
+            failures[tag] = failures.get(tag, 0) + 1
+    return counts, failures
 
 
 def _candidate_pass_rate(candidate_count: int, failure_count: int) -> float:
@@ -344,26 +402,28 @@ async def _load_items_by_case(session: AsyncSession, run_id: str) -> dict[str, E
     return {item.case_id: item for item in items}
 
 
-async def _load_trace_for_item(
-    session: AsyncSession,
-    item: EvalRunItem | None,
-) -> Trace | None:
-    if item is None:
-        return None
-    return await _load_trace(session, item.id)
-
-
-async def _load_trace(session: AsyncSession, run_item_id: str) -> Trace | None:
-    return await session.scalar(select(Trace).where(Trace.run_item_id == run_item_id))
+async def _load_results_by_item(
+    session: AsyncSession, run_item_ids: list[str]
+) -> dict[str, list[EvalResult]]:
+    grouped: dict[str, list[EvalResult]] = {}
+    if not run_item_ids:
+        return grouped
+    results = list(
+        await session.scalars(select(EvalResult).where(EvalResult.run_item_id.in_(run_item_ids)))
+    )
+    for result in results:
+        grouped.setdefault(result.run_item_id, []).append(result)
+    return grouped
 
 
 def _trace_case_to_dashboard_row(
     case: EvalCase,
     item: EvalRunItem,
-    trace: Trace,
+    trace: Trace | None,
     baseline_trace: Trace | None,
     results: list[EvalResult],
-    failed_result: EvalResult,
+    failed_result: EvalResult | None,
+    adapter_module: str,
 ) -> dict[str, Any]:
     semantic = _find_first_result(results, ["token_f1_overlap", "semantic_similarity"])
     keywords = _find_result(results, "contains_keywords")
@@ -373,8 +433,8 @@ def _trace_case_to_dashboard_row(
     return {
         "id": case.external_id or case.id,
         "tag": _first_tag(payload),
-        "evaluator": failed_result.evaluator_name,
-        "reason": _failure_reason(failed_result),
+        "evaluator": failed_result.evaluator_name if failed_result else "execution",
+        "reason": _failure_reason(failed_result, item),
         "question": _extract_question(payload),
         "expected": str(payload.get("expected_output", "")),
         "baselineAnswer": _trace_answer(baseline_trace),
@@ -385,6 +445,11 @@ def _trace_case_to_dashboard_row(
         "latencyMs": item.recorded_latency_ms or 0,
         "costUsd": _as_float(item.recorded_cost_usd or 0),
         "chunks": _trace_chunks(trace),
+        "adapter": (
+            str(trace.payload.get("metadata", {}).get("adapter_module", adapter_module))
+            if trace
+            else adapter_module
+        ),
     }
 
 
@@ -402,10 +467,12 @@ def _extract_question(payload: dict[str, Any]) -> str:
     return str(raw_input)
 
 
-def _failure_reason(result: EvalResult) -> str:
-    if result.error_message:
+def _failure_reason(result: EvalResult | None, item: EvalRunItem) -> str:
+    if result is not None and result.error_message:
         return result.error_message
-    return f"{result.evaluator_name} failed"
+    if result is not None:
+        return f"{result.evaluator_name} failed"
+    return item.error_message or f"Execution {item.status}"
 
 
 def _trace_answer(trace: Trace | None) -> str:
@@ -417,7 +484,9 @@ def _trace_answer(trace: Trace | None) -> str:
     return ""
 
 
-def _trace_chunks(trace: Trace) -> list[dict[str, Any]]:
+def _trace_chunks(trace: Trace | None) -> list[dict[str, Any]]:
+    if trace is None:
+        return []
     output = trace.payload.get("output", {})
     chunks = output.get("retrieved_chunks", []) if isinstance(output, dict) else []
     if not isinstance(chunks, list):
@@ -431,7 +500,7 @@ def _trace_chunks(trace: Trace) -> list[dict[str, Any]]:
             {
                 "rank": index,
                 "docId": str(chunk.get("doc_id", "")),
-                "text": str(chunk.get("text", "")),
+                "text": str(chunk.get("text") or chunk.get("chunk_text") or ""),
                 "score": _as_float(chunk.get("score", 0.0)),
             }
         )
@@ -460,7 +529,7 @@ async def _build_gate_rules(
 
 
 def _metric_label(metric: str) -> str:
-    for key, label, _short_label, _unit, _direction, _tolerance in METRIC_SPECS:
+    for key, label, _short_label, _unit, _direction in METRIC_SPECS:
         if key == metric:
             return label
     return metric

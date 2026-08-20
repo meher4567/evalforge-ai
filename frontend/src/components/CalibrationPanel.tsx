@@ -21,14 +21,14 @@ export function CalibrationPanel({
       <div className="panel__header">
         <div>
           <h2>Calibration preview</h2>
-          <p>Synthetic preview until the hand-labeled gold set is complete</p>
+          <p>Author-scored synthetic fixture; not an independently labeled validation study</p>
         </div>
         <StatusPill status="warn" label="methodology pending" />
       </div>
 
       <div className="calibration-grid">
         <div className="scatter-card">
-          <svg viewBox="0 0 300 220" role="img" aria-label="Evaluator score versus human label scatter plot">
+          <svg viewBox="0 0 300 220" role="img" aria-label="Evaluator score versus author rubric score scatter plot">
             <line x1="36" x2="270" y1="190" y2="190" className="axis" />
             <line x1="36" x2="36" y1="24" y2="190" className="axis" />
             <line x1="36" x2="256" y1="190" y2="40" className="trend-line" />
@@ -60,7 +60,7 @@ export function CalibrationPanel({
           </svg>
           <div className="scatter-card__labels">
             <span>Evaluator score</span>
-            <span>Human label</span>
+            <span>Author rubric score</span>
           </div>
         </div>
 

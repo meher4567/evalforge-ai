@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -17,14 +18,118 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.tenancy import DEFAULT_ORGANIZATION_ID
 from app.db.base import Base, new_uuid, utc_now
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (CheckConstraint("status IN ('active', 'disabled')", name="ck_users_status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class OidcIdentity(Base):
+    __tablename__ = "oidc_identities"
+    __table_args__ = (
+        UniqueConstraint("issuer", "subject", name="uq_oidc_identities_issuer_subject"),
+        UniqueConstraint("user_id", "issuer", name="uq_oidc_identities_user_issuer"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    issuer: Mapped[str] = mapped_column(String(512))
+    subject: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'evaluator', 'viewer')",
+            name="ck_memberships_role",
+        ),
+    )
+
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(20), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class PersonalApiKey(Base):
+    __tablename__ = "personal_api_keys"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "organization_id",
+            "name",
+            name="uq_personal_api_keys_user_org_name",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    key_prefix: Mapped[str] = mapped_column(String(16), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class App(Base):
     __tablename__ = "apps"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_apps_organization_id_name"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), default=DEFAULT_ORGANIZATION_ID, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -101,9 +206,19 @@ class EvalSuiteCase(Base):
 
 class EvaluatorConfig(Base):
     __tablename__ = "evaluator_configs"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "name",
+            name="uq_evaluator_configs_organization_id_name",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), default=DEFAULT_ORGANIZATION_ID, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
     config: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -112,6 +227,9 @@ class EvalRun(Base):
     __tablename__ = "eval_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), default=DEFAULT_ORGANIZATION_ID, index=True
+    )
     app_version_id: Mapped[str] = mapped_column(ForeignKey("app_versions.id"), index=True)
     suite_id: Mapped[str] = mapped_column(ForeignKey("eval_suites.id"), index=True)
     evaluator_config_id: Mapped[str] = mapped_column(ForeignKey("evaluator_configs.id"), index=True)
@@ -136,6 +254,10 @@ class EvalRunItem(Base):
     case_id: Mapped[str] = mapped_column(ForeignKey("eval_cases.id"), index=True)
     status: Mapped[str] = mapped_column(String(20), default="queued")
     attempt_count: Mapped[int] = mapped_column(Integer, default=1)
+    worker_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     recorded_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recorded_cost_usd: Mapped[float | None] = mapped_column(Numeric(10, 6), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -159,7 +281,11 @@ class Trace(Base):
 class EvalResult(Base):
     __tablename__ = "eval_results"
     __table_args__ = (
-        Index("ix_eval_results_run_item_id_evaluator_name", "run_item_id", "evaluator_name"),
+        UniqueConstraint(
+            "run_item_id",
+            "evaluator_name",
+            name="uq_eval_results_run_item_id_evaluator_name",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -179,9 +305,19 @@ class EvalResult(Base):
 
 class GateRule(Base):
     __tablename__ = "gate_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "name",
+            name="uq_gate_rules_organization_id_name",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    name: Mapped[str] = mapped_column(String(120), unique=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), default=DEFAULT_ORGANIZATION_ID, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
     rules: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -190,6 +326,9 @@ class Comparison(Base):
     __tablename__ = "comparisons"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), default=DEFAULT_ORGANIZATION_ID, index=True
+    )
     baseline_run_id: Mapped[str] = mapped_column(ForeignKey("eval_runs.id"), index=True)
     candidate_run_id: Mapped[str] = mapped_column(ForeignKey("eval_runs.id"), index=True)
     gate_rules_id: Mapped[str] = mapped_column(ForeignKey("gate_rules.id"), index=True)

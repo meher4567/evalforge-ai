@@ -1,4 +1,4 @@
-import { Eye, Filter } from "lucide-react";
+import { Eye } from "lucide-react";
 import type { RunRow } from "../data/demo";
 import { formatCost, formatLatency, formatPercent } from "../lib/format";
 import { StatusPill } from "./StatusPill";
@@ -17,9 +17,6 @@ export function RunsTable({ runs, selectedRunId, onSelectRun }: RunsTableProps) 
           <h2>Recent evaluation runs</h2>
           <p>Latest reproducible benchmark executions</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Filter runs">
-          <Filter size={16} />
-        </button>
       </div>
       <div className="table-wrap">
         <table>

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import new_uuid, utc_now
 from app.models import (
+    App,
     AppVersion,
     EvalCase,
     EvalRun,
@@ -23,6 +24,8 @@ from app.models import (
     EvalSuiteCase,
     EvaluatorConfig,
 )
+from app.services.errors import DispatchError, InvalidRunRequestError, ResourceNotFoundError
+from app.services.run_executor import validate_selected_cases
 from app.workers.celery_app import (
     celery_app,  # noqa: F401 — register Celery app before task imports
 )
@@ -37,6 +40,7 @@ async def dispatch_run(
     suite_id: str,
     evaluator_config_id: str,
     case_ids: list[str] | None = None,
+    organization_id: str = "00000000-0000-0000-0000-000000000001",
 ) -> EvalRun:
     """
     Create an EvalRun and dispatch all case eval tasks to Celery workers.
@@ -52,25 +56,40 @@ async def dispatch_run(
         The created EvalRun (status='running').
     """
     # Validate entities exist
-    version = await session.get(AppVersion, app_version_id)
-    suite = await session.get(EvalSuite, suite_id)
-    evaluator_config = await session.get(EvaluatorConfig, evaluator_config_id)
+    version = await session.scalar(
+        select(AppVersion)
+        .join(App, App.id == AppVersion.app_id)
+        .where(AppVersion.id == app_version_id, App.organization_id == organization_id)
+    )
+    suite = await session.scalar(
+        select(EvalSuite)
+        .join(App, App.id == EvalSuite.app_id)
+        .where(EvalSuite.id == suite_id, App.organization_id == organization_id)
+    )
+    evaluator_config = await session.scalar(
+        select(EvaluatorConfig).where(
+            EvaluatorConfig.id == evaluator_config_id,
+            EvaluatorConfig.organization_id == organization_id,
+        )
+    )
 
     if version is None:
-        raise ValueError("App version not found")
+        raise ResourceNotFoundError("App version not found")
     if suite is None:
-        raise ValueError("Eval suite not found")
+        raise ResourceNotFoundError("Eval suite not found")
     if evaluator_config is None:
-        raise ValueError("Evaluator config not found")
+        raise ResourceNotFoundError("Evaluator config not found")
+    if version.app_id != suite.app_id:
+        raise InvalidRunRequestError("App version and eval suite must belong to the same app")
 
     # Load cases
     cases = await _load_suite_cases(session, suite_id, case_ids)
-    if not cases:
-        raise ValueError("No cases found in suite")
+    validate_selected_cases(cases, case_ids)
 
     # Create the run
     run = EvalRun(
         id=new_uuid(),
+        organization_id=organization_id,
         app_version_id=app_version_id,
         suite_id=suite_id,
         evaluator_config_id=evaluator_config_id,
@@ -83,6 +102,7 @@ async def dispatch_run(
 
     # Create run items and dispatch tasks
     task_signatures = []
+    run_items: list[EvalRunItem] = []
     for case in cases:
         item = EvalRunItem(
             id=new_uuid(),
@@ -91,6 +111,7 @@ async def dispatch_run(
             status="queued",
         )
         session.add(item)
+        run_items.append(item)
         await session.flush()
 
         # Create Celery task signature
@@ -109,7 +130,20 @@ async def dispatch_run(
     # chord result list and receives only run_id.
     if task_signatures:
         job = chord(task_signatures, check_run_completion.si(run_id=run.id))
-        job.apply_async()
+        try:
+            job.apply_async()
+        except Exception as exc:
+            now = utc_now()
+            run.status = "failed"
+            run.case_errored = len(cases)
+            run.completed_at = now
+            for item in run_items:
+                item.status = "errored"
+                item.error_message = "Failed to submit task to worker queue"
+                item.completed_at = now
+            await session.commit()
+            logger.exception("Failed to dispatch eval tasks for run=%s", run.id)
+            raise DispatchError(run.id) from exc
         logger.info(
             "Dispatched %d eval tasks for run=%s",
             len(task_signatures),
@@ -126,6 +160,7 @@ async def dispatch_run_sync(
     suite_id: str,
     evaluator_config_id: str,
     case_ids: list[str] | None = None,
+    organization_id: str = "00000000-0000-0000-0000-000000000001",
 ) -> EvalRun:
     """
     Synchronous fallback — runs eval cases in-process without Celery.
@@ -140,6 +175,7 @@ async def dispatch_run_sync(
         suite_id=suite_id,
         evaluator_config_id=evaluator_config_id,
         case_ids=case_ids,
+        organization_id=organization_id,
     )
 
 

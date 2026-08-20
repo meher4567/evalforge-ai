@@ -28,6 +28,7 @@ seed:
 	@echo "   API:      http://localhost:8000/api/dashboard/latest"
 
 seed-local:
+	cd backend && uv run alembic upgrade head
 	cd backend && uv run python -m app.cli.seed --cases 100
 	@echo "✅ Local seed complete with 100 cases."
 
@@ -36,7 +37,7 @@ test:
 	cd backend && uv run pytest tests/ -v --tb=short
 
 test-cov:
-	cd backend && uv run pytest tests/ -v --tb=short
+	cd backend && uv run pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=70
 
 lint:
 	cd backend && uv run ruff check .
@@ -94,7 +95,7 @@ clean:
 verify:
 	cd backend && uv run ruff check .
 	cd backend && uv run ruff format --check .
-	cd backend && uv run pytest tests/ -v --tb=short
+	cd backend && uv run pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=70
 	cd frontend && npm run lint
 	cd frontend && npm run test -- --run
 	cd frontend && npm run build

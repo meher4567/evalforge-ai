@@ -1,6 +1,6 @@
 # EvalForge Calibration Labeling Rubric
 
-Use this rubric for the hand-labeled gold set. Label the model answer, not the retrieval result alone.
+Use this rubric for a future independently labeled validation set. Label the model answer, not the retrieval result alone. The repository's current 50-case calibration data is an author-scored synthetic fixture, not a completed gold set.
 
 ## 5-Point Scale
 

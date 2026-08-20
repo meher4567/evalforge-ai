@@ -1,0 +1,73 @@
+envVarGroups:
+  - name: evalforge-production
+    envVars:
+      - key: EVALFORGE_ENVIRONMENT
+        value: production
+      - key: EVALFORGE_RUN_MODE
+        value: celery
+      - key: EVALFORGE_ALLOWED_HOSTS
+        value: "*.onrender.com"
+      - key: EVALFORGE_AUTH_TOKEN_PEPPER
+        generateValue: true
+      - key: EVALFORGE_BOOTSTRAP_TOKEN
+        generateValue: true
+      - key: EVALFORGE_METRICS_TOKEN
+        generateValue: true
+      - key: EVALFORGE_CORS_ORIGINS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+services:
+  - type: web
+    name: evalforge-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /readyz
+    autoDeploy: true
+    envVars:
+      - fromGroup: evalforge-production
+      - key: EVALFORGE_DATABASE_URL
+        fromDatabase:
+          name: evalforge-postgres
+          property: connectionString
+      - key: EVALFORGE_REDIS_URL
+        fromDatabase:
+          name: evalforge-redis
+          property: connectionString
+
+  - type: worker
+    name: evalforge-worker
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile.worker
+    dockerContext: ./backend
+    autoDeploy: true
+    envVars:
+      - fromGroup: evalforge-production
+      - key: EVALFORGE_DATABASE_URL
+        fromDatabase:
+          name: evalforge-postgres
+          property: connectionString
+      - key: EVALFORGE_REDIS_URL
+        fromDatabase:
+          name: evalforge-redis
+          property: connectionString
+
+databases:
+  - name: evalforge-postgres
+    databaseName: evalforge
+    user: evalforge
+    plan: free
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+  - name: evalforge-redis
+    plan: free
+    ipAllowList: []

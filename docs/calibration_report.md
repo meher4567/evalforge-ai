@@ -1,39 +1,44 @@
-# EvalForge AI — Calibration Study Report
+# EvalForge AI — Synthetic Calibration Fixture Report
 
-## Gold Set
+## Study status
 
-- **Size**: 50 hand-labeled RAG QA pairs
-- **Labeler**: Project author (self-labeled)
-- **Rubric**: 5-point scale (5=perfect, 4=minor omission, 3=partial, 2=mostly wrong, 1=severe hallucination)
-- **Distribution**: 46 score-5, 2 score-2, 2 score-1
+This repository currently contains a 50-case, author-scored synthetic fixture. It exercises the calibration code and demonstrates the intended reporting format. It is **not** an independently labeled gold set and must not be treated as evidence that an evaluator is production-calibrated.
 
-## Results
+- Source: deterministic demo questions and deliberately injected failures
+- Scoring: one project author, using the 5-point rubric
+- Independent labelers: 0
+- Blinding: none
+- Inter-rater agreement: not measured
+- External or production outputs: none
 
-| Metric | Semantic Similarity | Keyword Coverage |
-|---|---|---|
+## Descriptive fixture results
+
+| Metric | Token F1 overlap | Keyword coverage |
+|---|---:|---:|
 | Pearson r | 0.9891 | 0.7329 |
 | Spearman ρ | 0.9991 | 0.6049 |
-| False Positive Rate | 0.00 | 0.00 |
-| False Negative Rate | 0.00 | 0.50 |
+| False-positive rate | 0.00 | 0.00 |
+| False-negative rate | 0.00 | 0.50 |
 
-## Named Findings
+These values describe only the constructed fixture. Because cases, expected outcomes, failure phrases, and author scores were designed together, the correlations are likely optimistic.
 
-### 1. Lexical keyword coverage over-penalizes correct paraphrases (severity: medium)
-**Evidence**: In 7/50 cases, the answer was labeled 5/5 by a human but `keyword_coverage < 1.0` because the question used synonyms (e.g., "isolated environments" for "virtual environments"). Semantic similarity correctly scored these as 1.0.
+## What the fixture suggests
 
-**Recommendation**: Do not use `keyword_coverage` as a regression gate for cases with synonym-heavy questions. Semantic similarity is a better quality indicator.
+1. Exact keyword coverage can penalize correct paraphrases. Validate this hypothesis on independently labeled outputs before changing a production gate.
+2. Forbidden-claim matching detects the exact injected phrases. It does not establish recall on novel hallucinations.
+3. Token F1 overlap tracks the author scores in this simple lexical dataset. It is a reproducible smoke-test metric, not a substitute for semantic or human evaluation.
 
-### 2. Forbidden-claim evaluator catches high-severity hallucinations reliably (severity: low)
-**Evidence**: Of 4 cases where `forbidden_claim` fired, 4 had human label_score ≤ 2. FPR = 0%.
+## Required path to a real calibration result
 
-**Recommendation**: Forbidden-claim detection is safe to use as a hard gate. A forbidden_claim trigger always signals a real quality problem.
+1. Sample real outputs across difficulty, domain, model, and failure categories.
+2. Freeze the rubric and evaluator thresholds before labeling.
+3. Use at least two independent, blinded labelers and adjudicate disagreements.
+4. Report label distribution, weighted Cohen’s kappa, confidence intervals, FPR/FNR, and per-slice results.
+5. Hold out a test split and avoid tuning thresholds on it.
+6. Publish anonymized input/output hashes and a versioned study manifest where data policy permits.
 
-### 3. Semantic similarity is the best single evaluator proxy for human judgment (severity: info)
-**Evidence**: `semantic_similarity` Spearman ρ = 0.9991 vs `keyword_coverage` Spearman ρ = 0.6049.
-
-**Recommendation**: Use `semantic_similarity` as the primary quality metric in gate rules. Supplement with `forbidden_claim` for safety-critical applications.
-
-## Reproducibility
+## Reproduction
 
 ```bash
-uv run python -m app.calibration.analyze
+uv run --directory backend python -m app.calibration.analyze
+```

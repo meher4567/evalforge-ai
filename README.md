@@ -7,13 +7,17 @@ EvalForge AI is an evaluation and regression testing platform for RAG and LLM ap
 ## Features
 
 - FastAPI backend for apps, versions, suites, cases, runs, traces, comparisons, dashboard snapshots, and CI gate reports
-- React/Vite dashboard for run summaries, metric comparisons, traces, calibration preview, and settings
+- React/Vite dashboard for live run summaries, metric comparisons, traces, explicit demo/calibration states, and active gate policies
 - PostgreSQL persistence with Redis-backed Celery worker execution
+- Organization tenancy with password sessions, personal API keys, four RBAC roles, and an
+  OIDC-ready external identity model
+- Prometheus metrics, optional OpenTelemetry OTLP tracing, optional Sentry reporting, and defined
+  availability/latency SLOs
 - Deterministic RAG demo adapter for repeatable local and CI evaluation
 - Configurable RAG adapter for Ollama or OpenAI-compatible chat completion providers
 - Groq/OpenAI-compatible chat adapter for live smoke tests
-- Evaluators for exact match, keyword coverage, token F1 overlap, embedding similarity, retrieval hit rate, forbidden claims, latency, and cost
-- Bootstrap confidence intervals and configurable gate rules for regression decisions
+- Evaluators for exact match, keyword coverage, token F1 overlap, embedding similarity, NLI faithfulness, retrieval hit rate, forbidden claims, latency, and cost
+- Case-paired bootstrap confidence intervals and persisted configurable gate rules for regression decisions
 - CI/CD deployment gate report API and CLI for JSON/Markdown artifacts
 - Flaky-eval classification over repeated case scores
 - Docker Compose stack with PostgreSQL, Redis, FastAPI, Celery worker, and nginx-served frontend
@@ -34,7 +38,7 @@ Redis broker  ---> Celery worker
 App adapter + evaluator engine
 ```
 
-The backend can run evaluations synchronously for local development and through Celery workers for the Docker path. The worker executes individual eval cases, stores traces and evaluator results, and updates run status when the Celery chord completes.
+The backend can run evaluations synchronously for local development and through Celery workers for the Docker path. The worker executes leased, retry-safe case tasks, stores traces and evaluator results, and derives progress from authoritative item state before the Celery chord finalizes a run.
 
 The dashboard can launch a small evaluation through the public API. It creates an app, versions, suite, cases, evaluator config, runs both versions, waits for completion, computes the comparison, and refreshes the latest dashboard snapshot.
 
@@ -50,7 +54,9 @@ The dashboard can launch a small evaluation through the public API. It creates a
 Backend:
 
 ```powershell
+docker compose up -d postgres redis
 uv sync --directory backend
+uv run --directory backend alembic upgrade head
 uv run --directory backend pytest
 uv run --directory backend uvicorn app.main:app --reload
 ```
@@ -58,7 +64,7 @@ uv run --directory backend uvicorn app.main:app --reload
 Frontend:
 
 ```powershell
-npm install --prefix frontend
+npm ci --prefix frontend
 npm run dev --prefix frontend
 ```
 
@@ -79,13 +85,13 @@ docker compose up --build
 Check health:
 
 ```powershell
-curl http://localhost:8000/healthz
+curl http://localhost:8000/readyz
 ```
 
 Seed demo data through Celery worker mode:
 
 ```powershell
-docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
+docker compose exec backend python -m app.cli.seed --mode celery --cases 50
 ```
 
 Query the latest dashboard snapshot:
@@ -115,7 +121,7 @@ Run against a local Ollama model by creating an app version with `adapter_module
 }
 ```
 
-For Groq, OpenAI, or another OpenAI-compatible endpoint, use `provider: "openai_compatible"` and set `api_key_env` to the environment variable that holds the API key.
+For Groq or OpenAI, use `provider: "openai_compatible"` and set `api_key_env` to an approved environment variable that holds the API key. Provider hosts and key-variable names are allowlisted; configure `EVALFORGE_LLM_ALLOWED_HOSTS` and `EVALFORGE_LLM_API_KEY_ENV_ALLOWLIST` deliberately for additional providers. Inline secrets are rejected.
 
 Stop and remove local volumes:
 
@@ -128,6 +134,7 @@ docker compose down -v
 Seed a deterministic demo project in synchronous mode:
 
 ```powershell
+uv run --directory backend alembic upgrade head
 uv run --directory backend python -m app.cli.seed --mode sync --cases 50
 ```
 
@@ -163,7 +170,7 @@ Backend:
 ```powershell
 uv run --directory backend ruff check .
 uv run --directory backend ruff format --check .
-uv run --directory backend pytest
+uv run --directory backend pytest --cov=app --cov-report=term-missing --cov-fail-under=70
 ```
 
 Frontend:
@@ -179,7 +186,7 @@ Docker/Celery smoke:
 
 ```powershell
 docker compose up --build -d
-docker compose exec backend uv run python -m app.cli.seed --mode celery --cases 50
+docker compose exec backend python -m app.cli.seed --mode celery --cases 50
 curl http://localhost:8000/api/dashboard/latest
 docker compose logs worker --tail 100
 docker compose down -v
@@ -198,10 +205,23 @@ The current Docker/Celery smoke benchmark is recorded in [benchmarks/results/202
 - [Architecture](docs/architecture.md)
 - [API reference](docs/api.md)
 - [Evaluation metrics](docs/eval-metrics.md)
+- [Authentication and tenant isolation](docs/authentication.md)
+- [Operations and SLOs](docs/operations.md)
+- [Load testing](docs/load-testing.md)
+- [Backup and disaster recovery](docs/disaster-recovery.md)
+- [Release checklist](docs/release-checklist.md)
+- [Synthetic calibration fixture report](docs/calibration_report.md)
 - [Calibration labeling rubric](docs/labeling_rubric.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Limitations
 
-- The default semantic similarity evaluator is deterministic and lightweight; it is not a replacement for a production embedding or judge model.
+- `semantic_similarity` is a deprecated alias for deterministic token F1 overlap; it is not a production semantic or judge model. Use evaluator capabilities to discover the optional embedding and faithfulness evaluators.
 - The included adapter and benchmark are deterministic demo assets, intended for reproducible testing.
+- The committed calibration data is an author-scored synthetic fixture, not an independently labeled gold set.
 - The committed throughput artifact measures the Docker/Celery smoke path only. Production capacity depends on model latency, worker sizing, and deployment hardware.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.

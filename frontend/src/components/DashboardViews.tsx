@@ -9,9 +9,7 @@ import { RunsTable } from "./RunsTable";
 import { StatusPill } from "./StatusPill";
 import { TraceInspector } from "./TraceInspector";
 
-const filters = ["all", "token_f1_overlap", "contains_keywords", "forbidden_claim"] as const;
-
-export type FailureFilter = (typeof filters)[number];
+export type FailureFilter = string;
 
 export function PageTitle({
   title,
@@ -19,12 +17,14 @@ export function PageTitle({
   benchmark,
   caseCount,
   meanCost,
+  gateVerdict,
 }: {
   title: string | undefined;
   selectedVersion: string;
   benchmark: string;
   caseCount: number;
   meanCost: number;
+  gateVerdict: "pass" | "warn" | "fail";
 }) {
   return (
     <div className="page-title">
@@ -35,10 +35,10 @@ export function PageTitle({
         </p>
       </div>
       <div className="page-title__right">
-        <StatusPill status="fail" label="candidate failed" />
+        <StatusPill status={gateVerdict} label={`candidate ${gateVerdict}`} />
         <span>
           <ClipboardCheck size={16} />
-          {caseCount} cases
+          {formatCount(caseCount, "case")}
         </span>
         <span>
           <BarChart3 size={16} />
@@ -50,17 +50,22 @@ export function PageTitle({
 }
 
 export function GatePanel({ summary }: { summary: DashboardSnapshot["benchmarkSummary"] }) {
+  const verdictLabel = {
+    pass: "Candidate approved",
+    warn: "Manual review required",
+    fail: "Regression blocked",
+  }[summary.gateVerdict];
   return (
     <section className="gate-panel" aria-label="Gate verdict">
       <div>
         <h2>Gate verdict</h2>
         <p>
-          {summary.caseCount} cases | {summary.totalExecutions} executions
+          {formatCount(summary.caseCount, "case")} | {formatCount(summary.totalExecutions, "execution")}
         </p>
       </div>
       <div className="gate-panel__verdict">
-        <StatusPill status="fail" label="fail" />
-        <strong>Regression blocked</strong>
+        <StatusPill status={summary.gateVerdict} label={summary.gateVerdict} />
+        <strong>{verdictLabel}</strong>
       </div>
       <dl className="gate-panel__numbers">
         <div>
@@ -98,7 +103,7 @@ export function OverviewView({
           ))}
         </div>
         <GatePanel summary={snapshot.benchmarkSummary} />
-        <ComparisonBars metrics={snapshot.metrics} />
+        <ComparisonBars metrics={snapshot.metrics} summary={snapshot.benchmarkSummary} />
         <RunsTable runs={snapshot.runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
       </div>
       <TraceInspector
@@ -124,7 +129,8 @@ export function RunDetailView({
   onSelectTraceIndex: (index: number) => void;
 }) {
   const selectedRun = snapshot.runs.find((run) => run.id === selectedRunId) ?? snapshot.runs[0];
-  const completed = selectedRun.status === "partial" ? selectedRun.cases - 4 : selectedRun.cases;
+  const completed = selectedRun.caseCompleted;
+  const processed = selectedRun.caseCompleted + selectedRun.caseErrored;
 
   return (
     <div className="detail-layout">
@@ -145,6 +151,9 @@ export function RunDetailView({
               Completed <strong>{completed}</strong>
             </span>
             <span>
+              Errored <strong>{selectedRun.caseErrored}</strong>
+            </span>
+            <span>
               Pass rate <strong>{formatPercent(selectedRun.passRate)}</strong>
             </span>
             <span>
@@ -152,7 +161,11 @@ export function RunDetailView({
             </span>
           </div>
           <div className="progress-track" aria-label="Run progress">
-            <span style={{ width: `${(completed / selectedRun.cases) * 100}%` }} />
+            <span
+              style={{
+                width: `${selectedRun.cases > 0 ? (processed / selectedRun.cases) * 100 : 0}%`,
+              }}
+            />
           </div>
         </section>
         <RunsTable runs={snapshot.runs} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
@@ -177,6 +190,7 @@ export function FailureTable({
   onFilterChange: (filter: FailureFilter) => void;
   onSelectTrace: (index: number) => void;
 }) {
+  const filters = ["all", ...new Set(failures.map((failure) => failure.evaluator))];
   const filtered = failures.filter((failure) => filter === "all" || failure.evaluator === filter);
 
   return (
@@ -233,6 +247,11 @@ export function FailureTable({
                 </tr>
               );
             })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6}>No failures match this filter.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -303,7 +322,7 @@ export function ComparisonView({
   return (
     <div className="comparison-layout">
       <GatePanel summary={snapshot.benchmarkSummary} />
-      <ComparisonBars metrics={snapshot.metrics} />
+      <ComparisonBars metrics={snapshot.metrics} summary={snapshot.benchmarkSummary} />
       <TagBreakdownPanel rows={snapshot.tagBreakdown} />
       <FailureTable
         failures={snapshot.traceCases}
@@ -341,7 +360,13 @@ export function TracesView({
   );
 }
 
-export function SettingsView({ rules }: { rules: DashboardSnapshot["gateRules"] }) {
+export function SettingsView({
+  rules,
+  verdict,
+}: {
+  rules: DashboardSnapshot["gateRules"];
+  verdict: "pass" | "warn" | "fail";
+}) {
   return (
     <section className="panel settings-panel" aria-label="Gate settings">
       <div className="panel__header">
@@ -349,7 +374,7 @@ export function SettingsView({ rules }: { rules: DashboardSnapshot["gateRules"] 
           <h2>Gate settings</h2>
           <p>Thresholds used by the current comparison report</p>
         </div>
-        <StatusPill status="fail" label="active gate" />
+        <StatusPill status={verdict} label="active policy" />
       </div>
       <div className="table-wrap">
         <table>
@@ -377,6 +402,22 @@ export function SettingsView({ rules }: { rules: DashboardSnapshot["gateRules"] 
       </div>
     </section>
   );
+}
+
+export function CalibrationUnavailable() {
+  return (
+    <section className="panel empty-state" aria-label="Calibration unavailable">
+      <h2>Calibration data is not available for this comparison</h2>
+      <p>
+        Live calibration requires independently labeled outputs. Synthetic preview data is shown
+        only when explicit demo mode is enabled.
+      </p>
+    </section>
+  );
+}
+
+function formatCount(value: number, noun: string): string {
+  return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 
 export { CalibrationPanel };

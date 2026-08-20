@@ -42,8 +42,9 @@ SUMMARY_REQUIRED = {
 
 
 class TestBenchmarkReport:
+    @classmethod
     @pytest.fixture(scope="class")
-    def report(self):
+    def report(cls):
         if not BENCHMARK_PATH.exists():
             pytest.skip(f"Benchmark report not found at {BENCHMARK_PATH}")
         with open(BENCHMARK_PATH, encoding="utf-8") as f:

@@ -16,7 +16,9 @@ flowchart LR
     UI --> API["FastAPI REST APIs"]
     DASH --> DB[("SQL Database")]
     API --> DB
-    API --> RUNNER["Run Executor"]
+    API --> REDIS[("Redis broker")]
+    REDIS --> WORKER["Celery workers"]
+    WORKER --> RUNNER["Run Executor"]
     RUNNER --> ADAPTER["Demo RAG Adapter"]
     RUNNER --> EVAL["Evaluator Engine"]
     ADAPTER --> RUNNER
@@ -101,7 +103,7 @@ sequenceDiagram
     Frontend-->>Browser: Metrics + failed trace UI
 ```
 
-If `/api/dashboard/latest` is unavailable, the frontend tries `/api/dashboard/demo`. If that is unavailable too, it uses local demo data. This keeps the UI usable during frontend-only work without hiding the backend boundary.
+In normal mode, a missing or unavailable `/api/dashboard/latest` response produces an explicit empty/error state. Demo data is used only when `VITE_DEMO_MODE=true`; the UI then labels its source as demo data. The packaged nginx server proxies `/api/*` to FastAPI.
 
 ## Current Deployment Model
 
@@ -109,21 +111,19 @@ Docker Compose defines:
 
 - PostgreSQL with pgvector image
 - Redis
+- One-shot Alembic migration service
 - FastAPI backend
 - Celery worker
 - Nginx-served frontend build
 
-Docker runtime was verified locally on June 16, 2026. The Compose stack built and started successfully, `/healthz` returned `ok`, and a 50-case Celery seed completed both baseline and candidate runs through the worker path before computing the comparison gate.
+The Docker smoke workflow builds the packaged stack, waits for migration-aware readiness, completes 50 baseline and 50 candidate cases through Celery, validates the live dashboard payload and nginx API proxy, and uploads a measured throughput artifact. This path was also exercised locally against a fresh database during the August 2026 hardening pass.
 
 ## Scaling Path
 
 EvalForge supports sync execution for deterministic tests and Celery execution for Redis-backed worker runs. The next scaling path is:
 
-1. Keep the API request fast by creating the run and enqueueing tasks.
-2. Use Redis as broker.
-3. Run Celery workers for case execution.
-4. Use atomic counter updates for run progress.
-5. Keep trace writes bounded per case.
-6. Precompute comparison reports so dashboard reads are cheap.
-
-This is a clear next phase, not something to claim as already complete.
+1. The API persists a run and enqueues one leased task per case through Redis.
+2. Celery workers execute cases with late acknowledgements, bounded retries, delivery leases, and idempotent progress recounting.
+3. A completion chord derives the final run state from terminal item rows, including evaluator failures.
+4. Comparison reports are precomputed and dashboard aggregation uses bounded bulk queries.
+5. The next scale step is an external blob store for large traces, queue partitioning by adapter/model capacity, and production load testing against real providers.

@@ -26,7 +26,7 @@ jobs:
         run: |
           HEALTHY=0
           for i in $(seq 1 60); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/healthz || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/readyz || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "Backend healthy (HTTP $STATUS)"
               HEALTHY=1
@@ -41,13 +41,13 @@ jobs:
             exit 1
           fi
           echo "=== Health check response ==="
-          curl -s http://localhost:8000/healthz | python3 -m json.tool
+          curl -s http://localhost:8000/readyz | python3 -m json.tool
 
       - name: Seed demo data via Celery worker
         id: seed
         run: |
           echo "=== Running seed in Celery mode ==="
-          docker compose exec -T backend uv run python -m app.cli.seed --mode celery --cases 50 2>&1 | tee /tmp/seed.log
+          docker compose exec -T backend python -m app.cli.seed --mode celery --cases 50 2>&1 | tee /tmp/seed.log
           echo "=== Seed output ==="
           cat /tmp/seed.log
           # Verify seed completed successfully by checking for summary in output
@@ -71,8 +71,9 @@ jobs:
           import json, sys
           data = json.load(sys.stdin)
           summary = data.get('benchmarkSummary') or {}
-          assert summary.get('gateVerdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
+          assert summary.get('gateVerdict') in ('pass', 'warn', 'fail'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
           assert isinstance(data.get('metrics'), list) and data['metrics'], 'Missing metrics'
+          assert data.get('dataSource') == 'live', f\"Unexpected dataSource: {data.get('dataSource')}\"
           print('Dashboard assertions passed: gateVerdict=' + str(summary.get('gateVerdict')))
           "; then
             echo "Dashboard data is valid"
@@ -80,6 +81,15 @@ jobs:
             echo "ERROR: Dashboard returned invalid or empty data"
             exit 1
           fi
+
+      - name: Verify packaged frontend and API proxy
+        run: |
+          FRONTEND_STATUS=$(curl -s -o /tmp/evalforge-index.html -w "%{http_code}" http://localhost:5173/)
+          API_STATUS=$(curl -s -o /tmp/evalforge-proxied-dashboard.json -w "%{http_code}" http://localhost:5173/api/dashboard/latest)
+          test "$FRONTEND_STATUS" = "200"
+          test "$API_STATUS" = "200"
+          grep -q '<div id="root"></div>' /tmp/evalforge-index.html
+          python3 -c "import json; data=json.load(open('/tmp/evalforge-proxied-dashboard.json')); assert data['dataSource'] == 'live'"
 
       - name: Verify Celery worker processed tasks
         run: |

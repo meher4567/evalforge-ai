@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          uv sync --locked --group dev
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest tests --cov=app --cov-report=term-missing --cov-fail-under=70
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run test -- --run
+          npm run build
+
+      - name: Create source archives
+        run: |
+          git archive --format=tar.gz --prefix="evalforge-ai-${GITHUB_REF_NAME}/" \
+            --output="evalforge-ai-${GITHUB_REF_NAME}.tar.gz" "${GITHUB_REF_NAME}"
+          git archive --format=zip --prefix="evalforge-ai-${GITHUB_REF_NAME}/" \
+            --output="evalforge-ai-${GITHUB_REF_NAME}.zip" "${GITHUB_REF_NAME}"
+          sha256sum evalforge-ai-* > SHA256SUMS
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --generate-notes \
+            --title "EvalForge AI ${GITHUB_REF_NAME}" \
+            evalforge-ai-*.tar.gz evalforge-ai-*.zip SHA256SUMS

@@ -1,4 +1,11 @@
 import {
+  type BenchmarkSummary,
+  type GateRule,
+  type MetricSummary,
+  type RunRow,
+  type TagBreakdownRow,
+  type TraceCase,
+  type TracePagination,
   benchmarkSummary,
   gateRules,
   metrics,
@@ -9,18 +16,20 @@ import {
 } from "../data/demo";
 
 export interface DashboardSnapshot {
-  benchmarkSummary: typeof benchmarkSummary;
-  metrics: typeof metrics;
-  runs: typeof runs;
-  traceCases: typeof traceCases;
-  tracePagination: typeof tracePagination;
-  tagBreakdown: typeof tagBreakdown;
-  gateRules: typeof gateRules;
+  dataSource: "live" | "demo";
+  comparisonId: string | null;
+  benchmarkSummary: BenchmarkSummary;
+  metrics: MetricSummary[];
+  runs: RunRow[];
+  traceCases: TraceCase[];
+  tracePagination: TracePagination;
+  tagBreakdown: TagBreakdownRow[];
+  gateRules: GateRule[];
 }
 
 interface RunRecord {
   id: string;
-  status: "completed" | "partial" | "running" | "failed";
+  status: "completed" | "partial" | "running" | "failed" | "cancelled" | "timed_out";
 }
 
 interface RunDemoOptions {
@@ -29,6 +38,59 @@ interface RunDemoOptions {
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
   onStatus?: (message: string) => void;
+}
+
+interface LoginOptions {
+  email: string;
+  password: string;
+  organizationSlug?: string;
+  apiBaseUrl?: string;
+}
+
+interface LoginResponse {
+  access_token: string;
+  role: "owner" | "admin" | "evaluator" | "viewer";
+  organization: { id: string; name: string; slug: string };
+  user: { id: string; email: string; display_name: string };
+}
+
+const API_KEY_SESSION_KEY = "evalforge.api-key";
+
+export function setSessionApiKey(apiKey: string): void {
+  const normalized = apiKey.trim();
+  if (normalized) {
+    window.sessionStorage.setItem(API_KEY_SESSION_KEY, normalized);
+  } else {
+    window.sessionStorage.removeItem(API_KEY_SESSION_KEY);
+  }
+}
+
+export async function login({
+  email,
+  password,
+  organizationSlug,
+  apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "",
+}: LoginOptions): Promise<LoginResponse> {
+  const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      password,
+      organization_slug: organizationSlug?.trim() || null,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401 ? "Invalid sign-in details" : `Sign-in failed (${response.status})`,
+    );
+  }
+  if (!response.headers.get("Content-Type")?.includes("application/json")) {
+    throw new Error("Sign-in API did not return JSON");
+  }
+  const payload = (await response.json()) as LoginResponse;
+  setSessionApiKey(payload.access_token);
+  return payload;
 }
 
 const demoCorpus = [
@@ -71,18 +133,33 @@ const demoCases = [
 
 export async function loadDashboardSnapshot(
   apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "",
+  allowDemo = import.meta.env.VITE_DEMO_MODE === "true",
 ): Promise<DashboardSnapshot> {
-  const latest = await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/latest`);
-  if (latest) {
-    return latest;
+  let latestError: unknown;
+  try {
+    return await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/latest`);
+  } catch (error) {
+    latestError = error;
   }
 
-  const demo = await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/demo`);
-  if (demo) {
-    return demo;
+  if (allowDemo) {
+    try {
+      return await fetchDashboardSnapshot(`${apiBaseUrl}/api/dashboard/demo`);
+    } catch {
+      return localDemoSnapshot();
+    }
   }
 
+  throw new Error(
+    `Unable to load a persisted comparison: ${errorMessage(latestError)}. ` +
+      "Run an evaluation or enable VITE_DEMO_MODE=true for explicit demo data.",
+  );
+}
+
+function localDemoSnapshot(): DashboardSnapshot {
   return {
+    dataSource: "demo",
+    comparisonId: null,
     benchmarkSummary,
     metrics,
     runs,
@@ -135,7 +212,7 @@ export async function runDemoEvaluation({
     config: {
       evaluators: [
         { name: "contains_keywords", threshold: 0.8 },
-        { name: "semantic_similarity", threshold: 0.5 },
+        { name: "token_f1_overlap", threshold: 0.5 },
         { name: "retrieval_hit_rate" },
         { name: "forbidden_claim" },
         { name: "latency_threshold", threshold_ms: 200 },
@@ -151,6 +228,7 @@ export async function runDemoEvaluation({
     pollIntervalMs,
     pollTimeoutMs,
   );
+  assertComparableRun(baselineRun);
   onStatus?.("Running candidate");
   const candidateRun = await waitForTerminalRun(
     await createRun(apiBaseUrl, candidateVersion.id, suite.id, evaluatorConfig.id),
@@ -158,6 +236,7 @@ export async function runDemoEvaluation({
     pollIntervalMs,
     pollTimeoutMs,
   );
+  assertComparableRun(candidateRun);
 
   onStatus?.("Computing comparison");
   await postJson(`${apiBaseUrl}/api/comparisons`, {
@@ -165,22 +244,21 @@ export async function runDemoEvaluation({
     candidate_run_id: candidateRun.id,
   });
   onStatus?.("Refreshing dashboard");
-  return loadDashboardSnapshot(apiBaseUrl);
+  return loadDashboardSnapshot(apiBaseUrl, false);
 }
 
-async function fetchDashboardSnapshot(url: string): Promise<DashboardSnapshot | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Dashboard API returned ${response.status}`);
-    }
-    if (!response.headers.get("Content-Type")?.includes("application/json")) {
-      throw new Error("Dashboard API did not return JSON");
-    }
-    return response.json() as Promise<DashboardSnapshot>;
-  } catch {
-    return null;
+async function fetchDashboardSnapshot(url: string): Promise<DashboardSnapshot> {
+  const authHeaders = sessionAuthHeaders();
+  const response = Object.keys(authHeaders).length
+    ? await fetch(url, { headers: authHeaders })
+    : await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Dashboard API returned ${response.status}`);
   }
+  if (!response.headers.get("Content-Type")?.includes("application/json")) {
+    throw new Error("Dashboard API did not return JSON");
+  }
+  return response.json() as Promise<DashboardSnapshot>;
 }
 
 async function createRun(
@@ -219,7 +297,13 @@ async function waitForTerminalRun(
 }
 
 function isTerminalRun(run: RunRecord): boolean {
-  return run.status === "completed" || run.status === "partial";
+  return ["completed", "partial", "failed", "cancelled", "timed_out"].includes(run.status);
+}
+
+function assertComparableRun(run: RunRecord): void {
+  if (run.status !== "completed" && run.status !== "partial") {
+    throw new Error(`Run ${run.id} ended with status ${run.status} before comparison`);
+  }
 }
 
 async function postJson<T = unknown>(url: string, body: unknown): Promise<T> {
@@ -231,7 +315,11 @@ async function postJson<T = unknown>(url: string, body: unknown): Promise<T> {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  for (const [name, value] of Object.entries(sessionAuthHeaders())) {
+    headers.set(name, value);
+  }
+  const response = await fetch(url, { ...init, headers });
   if (!response.ok) {
     throw new Error(`API returned ${response.status} for ${url}`);
   }
@@ -243,4 +331,13 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown dashboard error";
+}
+
+function sessionAuthHeaders(): Record<string, string> {
+  const apiKey = window.sessionStorage.getItem(API_KEY_SESSION_KEY);
+  return apiKey ? { "X-EvalForge-Api-Key": apiKey } : {};
 }

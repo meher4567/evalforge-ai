@@ -12,6 +12,20 @@ interface TraceInspectorProps {
 export function TraceInspector({ cases, selectedIndex, onSelectIndex }: TraceInspectorProps) {
   const selected = cases[selectedIndex];
 
+  if (!selected) {
+    return (
+      <aside className="trace-inspector trace-inspector--empty" aria-label="Trace inspector">
+        <div className="trace-inspector__header">
+          <div>
+            <h2>Trace inspector</h2>
+            <p>No failed cases in this comparison.</p>
+          </div>
+          <StatusPill status="pass" label="clear" />
+        </div>
+      </aside>
+    );
+  }
+
   function move(direction: -1 | 1) {
     const next = (selectedIndex + direction + cases.length) % cases.length;
     onSelectIndex(next);
@@ -95,7 +109,7 @@ export function TraceInspector({ cases, selectedIndex, onSelectIndex }: TraceIns
         <dl className="metadata-grid">
           <div>
             <dt>Adapter</dt>
-            <dd>demo_rag</dd>
+            <dd>{selected.adapter ?? "unknown"}</dd>
           </div>
           <div>
             <dt>Evaluator</dt>
@@ -112,7 +126,11 @@ export function TraceInspector({ cases, selectedIndex, onSelectIndex }: TraceIns
         </dl>
       </div>
 
-      <button className="secondary-action" type="button">
+      <button
+        className="secondary-action"
+        type="button"
+        onClick={() => void navigator.clipboard?.writeText(selected.id).catch(() => undefined)}
+      >
         <Copy size={15} />
         Copy trace id
       </button>
