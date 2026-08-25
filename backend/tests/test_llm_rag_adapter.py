@@ -38,7 +38,7 @@ def test_ollama_adapter_calls_chat_endpoint_and_returns_model_answer(monkeypatch
         "Which Python module creates virtual environments?",
         {
             "provider": "ollama",
-            "base_url": "http://ollama.test",
+            "base_url": "http://localhost:11434",
             "model": "llama3.2:3b",
             "corpus": [
                 {
@@ -49,7 +49,7 @@ def test_ollama_adapter_calls_chat_endpoint_and_returns_model_answer(monkeypatch
         },
     )
 
-    assert captured["url"] == "http://ollama.test/api/chat"
+    assert captured["url"] == "http://localhost:11434/api/chat"
     assert captured["body"]["model"] == "llama3.2:3b"
     assert captured["body"]["stream"] is False
     assert "retrieved context" in captured["body"]["messages"][0]["content"].lower()
@@ -104,14 +104,42 @@ def test_openai_compatible_adapter_sends_authorization_header(monkeypatch):
 def test_openai_compatible_adapter_requires_configured_api_key(monkeypatch):
     from app.adapters import llm_rag
 
-    monkeypatch.delenv("MISSING_LLM_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="MISSING_LLM_KEY"):
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         llm_rag.run(
             "Which Python module handles JSON documents?",
             {
                 "provider": "openai_compatible",
-                "api_key_env": "MISSING_LLM_KEY",
+                "api_key_env": "OPENAI_API_KEY",
                 "model": "llama-3.1-8b-instant",
+            },
+        )
+
+
+def test_openai_compatible_adapter_rejects_unapproved_key_environment(monkeypatch):
+    from app.adapters import llm_rag
+
+    monkeypatch.setenv("DATABASE_PASSWORD", "must-not-be-exfiltrated")
+    with pytest.raises(ValueError, match="not allowed"):
+        llm_rag.run(
+            "hello",
+            {
+                "provider": "openai_compatible",
+                "api_key_env": "DATABASE_PASSWORD",
+            },
+        )
+
+
+def test_openai_compatible_adapter_rejects_private_remote_url(monkeypatch):
+    from app.adapters import llm_rag
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    with pytest.raises(ValueError, match="Private provider URLs"):
+        llm_rag.run(
+            "hello",
+            {
+                "provider": "openai_compatible",
+                "base_url": "http://169.254.169.254/latest/meta-data",
             },
         )

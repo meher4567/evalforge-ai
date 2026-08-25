@@ -6,6 +6,20 @@ from app.adapters import groq_chat
 def test_groq_chat_adapter_calls_groq_and_returns_evalforge_output(monkeypatch):
     captured = {}
 
+    monkeypatch.setattr(
+        groq_chat,
+        "get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "groq_api_key": "test-secret",
+                "llm_model": "llama-test-model",
+                "llm_base_url": "https://api.groq.com/openai/v1",
+            },
+        )(),
+    )
+
     def fake_post_chat_completion(base_url, api_key, payload, timeout_seconds):
         captured["base_url"] = base_url
         captured["api_key"] = api_key
@@ -21,7 +35,6 @@ def test_groq_chat_adapter_calls_groq_and_returns_evalforge_output(monkeypatch):
     output = groq_chat.run(
         "Which Python module creates virtual environments?",
         {
-            "api_key": "test-secret",
             "base_url": "https://api.groq.com/openai/v1",
             "model": "llama-test-model",
             "top_k": 1,

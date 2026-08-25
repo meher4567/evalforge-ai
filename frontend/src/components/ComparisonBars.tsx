@@ -1,4 +1,5 @@
 import type { MetricSummary } from "../data/demo";
+import type { DashboardSnapshot } from "../api/client";
 import { formatCost, formatLatency, formatNumber, formatPercent } from "../lib/format";
 import { StatusPill } from "./StatusPill";
 
@@ -15,15 +16,23 @@ function barWidth(metric: MetricSummary, value: number): string {
   return `${Math.min(scaled, 100)}%`;
 }
 
-export function ComparisonBars({ metrics }: { metrics: MetricSummary[] }) {
+export function ComparisonBars({
+  metrics,
+  summary,
+}: {
+  metrics: MetricSummary[];
+  summary: DashboardSnapshot["benchmarkSummary"];
+}) {
   return (
     <section className="panel comparison-panel" aria-label="Comparison summary">
       <div className="panel__header">
         <div>
           <h2>Comparison summary</h2>
-          <p>Baseline v1 against injected-regression candidate</p>
+          <p>
+            {summary.baselineVersion ?? "Baseline"} against {summary.candidateVersion ?? "candidate"}
+          </p>
         </div>
-        <StatusPill status="fail" label="gate fail" />
+        <StatusPill status={summary.gateVerdict} label={`gate ${summary.gateVerdict}`} />
       </div>
 
       <div className="comparison-bars">

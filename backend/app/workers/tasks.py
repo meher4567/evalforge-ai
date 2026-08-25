@@ -6,23 +6,24 @@ Each task executes ONE eval case against ONE app version:
 2. Call the app adapter
 3. Run all configured evaluators
 4. Store trace + results
-5. Update run counters atomically
+5. Recount run progress from authoritative item states
 
 Retry semantics:
 - Transient errors (connection, timeout) trigger automatic retry.
 - Permanent errors (missing entities, bad adapter) fail immediately.
-- Counters are only incremented on final completion or final failure,
+- Counters are derived only after final completion or final failure,
   never during a retry loop.
-- Duplicate task delivery is safe: completed items are skipped.
+- Duplicate task delivery is protected by worker leases and terminal items are skipped.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import timedelta
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from sqlalchemy import create_engine, text
+from sqlalchemy import and_, create_engine, or_, text, update
 from sqlalchemy.orm import Session
 
 from app.adapters.loader import load_adapter
@@ -50,6 +51,8 @@ _SYNC_DATABASE_URL = settings.database_url.replace("+asyncpg", "+psycopg2").repl
 )
 
 _engine = create_engine(_SYNC_DATABASE_URL, pool_size=5, max_overflow=10)
+TERMINAL_ITEM_STATUSES = frozenset({"completed", "errored", "timed_out", "cancelled"})
+TASK_LEASE_SECONDS = 240
 
 
 @shared_task(
@@ -88,12 +91,35 @@ def run_eval_case(
     )
 
     with Session(_engine) as session:
+        run_item: EvalRunItem | None = None
         try:
-            # Load entities
+            run_item = session.get(EvalRunItem, run_item_id)
+            if run_item is None:
+                raise ValueError(f"Run item {run_item_id} not found")
+
+            if run_item.status in TERMINAL_ITEM_STATUSES:
+                logger.info(
+                    "Run item %s is already terminal (%s), skipping",
+                    run_item_id,
+                    run_item.status,
+                )
+                return {"status": "skipped", "reason": f"already_{run_item.status}"}
+
+            task_id = str(self.request.id or f"manual:{run_item_id}")
+            if not _claim_run_item(
+                session,
+                run_item_id=run_item_id,
+                task_id=task_id,
+                attempt_count=self.request.retries + 1,
+            ):
+                logger.info("Run item %s is owned by another active worker", run_item_id)
+                return {"status": "skipped", "reason": "already_in_progress"}
+
+            # Load remaining entities after this delivery owns the item lease.
+            run_item = session.get(EvalRunItem, run_item_id)
             case = session.get(EvalCase, case_id)
             version = session.get(AppVersion, version_id)
             evaluator_config = session.get(EvaluatorConfig, evaluator_config_id)
-            run_item = session.get(EvalRunItem, run_item_id)
 
             if case is None:
                 raise ValueError(f"Case {case_id} not found")
@@ -101,14 +127,6 @@ def run_eval_case(
                 raise ValueError(f"Version {version_id} not found")
             if evaluator_config is None:
                 raise ValueError(f"Evaluator config {evaluator_config_id} not found")
-            if run_item is None:
-                raise ValueError(f"Run item {run_item_id} not found")
-
-            # ── Idempotency: skip already-completed items ──
-            if run_item.status == "completed":
-                logger.info("Run item %s already completed, skipping", run_item_id)
-                return {"status": "skipped", "reason": "already_completed"}
-
             # ── Clean up partial results from a previous retry ──
             if self.request.retries > 0:
                 logger.info(
@@ -117,12 +135,6 @@ def run_eval_case(
                     run_item_id,
                 )
                 _clear_stale_data(session, run_item_id)
-
-            # Mark as running and increment attempt count
-            run_item.status = "running"
-            run_item.started_at = utc_now()
-            run_item.attempt_count = self.request.retries + 1
-            session.commit()
 
             # Extract question from case payload
             question = _extract_question(case.payload)
@@ -141,6 +153,7 @@ def run_eval_case(
             run_item.recorded_cost_usd = output.estimated_cost_usd
             run_item.status = "completed"
             run_item.completed_at = utc_now()
+            run_item.lease_expires_at = None
 
             # Store trace
             trace = Trace(
@@ -154,6 +167,7 @@ def run_eval_case(
                         "retrieved_chunks": output.retrieved_chunks,
                     },
                     "metadata": {
+                        "adapter_module": version.adapter_module,
                         "model_used": output.model_used,
                         "prompt_used": output.prompt_used,
                         "latency_ms": output.latency_ms,
@@ -180,8 +194,9 @@ def run_eval_case(
 
             session.commit()
 
-            # Atomically update the run's completion counter
-            _increment_run_counter(session, run_item.run_id, completed=True)
+            # Recount from terminal rows so retries and duplicate delivery cannot
+            # inflate progress counters.
+            _refresh_run_progress(session, run_item.run_id)
 
             logger.info(
                 "Completed eval case: run_item=%s latency_ms=%d cost_usd=%s evaluators=%d",
@@ -199,6 +214,7 @@ def run_eval_case(
             }
 
         except Exception as exc:
+            session.rollback()
             logger.error(
                 "Eval case failed: run_item=%s error=%s attempt=%d",
                 run_item_id,
@@ -224,17 +240,23 @@ def run_eval_case(
                 exc,
             )
 
-            if run_item is not None:
-                run_item.status = "errored"
-                run_item.error_message = str(exc)[:1000]
-                run_item.completed_at = utc_now()
-                run_item.attempt_count = self.request.retries + 1
+            final_item = session.get(EvalRunItem, run_item_id)
+            if final_item is not None and final_item.status not in TERMINAL_ITEM_STATUSES:
+                final_item.status = "errored"
+                final_item.error_message = str(exc)[:1000]
+                final_item.completed_at = utc_now()
+                final_item.lease_expires_at = None
+                final_item.attempt_count = self.request.retries + 1
                 session.commit()
-                # Only increment errored counter on final failure
-                _increment_run_counter(session, run_item.run_id, completed=False, errored=True)
+                _refresh_run_progress(session, final_item.run_id)
 
-            # Re-raise so Celery records the final failure
-            raise
+            # A header task must return so the Celery chord always invokes the
+            # authoritative completion callback. The item row remains errored.
+            return {
+                "status": "errored",
+                "run_item_id": run_item_id,
+                "error": str(exc)[:1000],
+            }
 
 
 @shared_task(name="evalforge.check_run_completion")
@@ -260,7 +282,7 @@ def check_run_completion(
             text(
                 "SELECT count(*) as total, "
                 "sum(case when status = 'completed' then 1 else 0 end) as completed, "
-                "sum(case when status = 'errored' or status = 'timed_out' "
+                "sum(case when status in ('errored', 'timed_out', 'cancelled') "
                 "then 1 else 0 end) as errored "
                 "FROM eval_run_items WHERE run_id = :run_id"
             ),
@@ -270,7 +292,11 @@ def check_run_completion(
         if row is None:
             return {"status": "unknown"}
 
-        total, completed, errored = row
+        total, completed, errored = (int(value or 0) for value in row)
+
+        if total == 0:
+            logger.warning("Run %s has no items to finalize", run_id)
+            return {"status": "unknown", "completed": 0, "errored": 0}
 
         if completed + errored >= total:
             new_status = "completed" if errored == 0 else "partial"
@@ -309,26 +335,59 @@ def _extract_question(case_payload: dict) -> str:
     return str(raw_input)
 
 
-def _increment_run_counter(
+def _claim_run_item(
     session: Session,
-    run_id: str,
     *,
-    completed: bool = False,
-    errored: bool = False,
-) -> None:
-    """Atomically increment the run's counter fields."""
-    set_clauses = []
-    if completed:
-        set_clauses.append("case_completed = case_completed + 1")
-    if errored:
-        set_clauses.append("case_errored = case_errored + 1")
-
-    if set_clauses:
-        session.execute(
-            text(f"UPDATE eval_runs SET {', '.join(set_clauses)} WHERE id = :run_id"),
-            {"run_id": run_id},
+    run_item_id: str,
+    task_id: str,
+    attempt_count: int,
+) -> bool:
+    """Atomically claim an item unless another live task delivery owns it."""
+    now = utc_now()
+    claim = session.execute(
+        update(EvalRunItem)
+        .where(
+            EvalRunItem.id == run_item_id,
+            or_(
+                EvalRunItem.status == "queued",
+                and_(
+                    EvalRunItem.status == "running",
+                    or_(
+                        EvalRunItem.worker_task_id == task_id,
+                        EvalRunItem.lease_expires_at.is_(None),
+                        EvalRunItem.lease_expires_at < now,
+                    ),
+                ),
+            ),
         )
-        session.commit()
+        .values(
+            status="running",
+            worker_task_id=task_id,
+            lease_expires_at=now + timedelta(seconds=TASK_LEASE_SECONDS),
+            attempt_count=attempt_count,
+            started_at=now,
+            completed_at=None,
+            error_message=None,
+        )
+    )
+    session.commit()
+    return bool(claim.rowcount)
+
+
+def _refresh_run_progress(session: Session, run_id: str) -> None:
+    """Set progress counters from authoritative item states."""
+    session.execute(
+        text(
+            "UPDATE eval_runs SET "
+            "case_completed = (SELECT count(*) FROM eval_run_items "
+            "WHERE run_id = :run_id AND status = 'completed'), "
+            "case_errored = (SELECT count(*) FROM eval_run_items "
+            "WHERE run_id = :run_id AND status IN ('errored', 'timed_out', 'cancelled')) "
+            "WHERE id = :run_id"
+        ),
+        {"run_id": run_id},
+    )
+    session.commit()
 
 
 def _clear_stale_data(session: Session, run_item_id: str) -> None:

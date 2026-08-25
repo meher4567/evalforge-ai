@@ -45,7 +45,7 @@ test("launches an evaluation and refreshes the dashboard", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("2 cases").first()).toBeVisible();
-  await page.getByRole("button", { name: "Run evaluation" }).click();
+  await page.getByRole("button", { name: "Run demo evaluation" }).click();
   await expect(page.getByRole("status")).toContainText("Creating evaluation project");
   await expect(page.getByText("3 cases").first()).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Evaluation complete");
@@ -54,9 +54,15 @@ test("launches an evaluation and refreshes the dashboard", async ({ page }) => {
 
 function dashboardSnapshot(caseCount: number) {
   return {
+    dataSource: "live",
+    comparisonId: "comparison-e2e",
     benchmarkSummary: {
       generatedAt: "2026-06-03T00:00:00Z",
       benchmark: "e2e_dashboard_flow",
+      projectName: "E2E project",
+      suiteName: "ui-smoke",
+      baselineVersion: "baseline",
+      candidateVersion: "candidate",
       caseCount,
       totalExecutions: caseCount * 2,
       elapsedSeconds: 1.5,
@@ -107,6 +113,17 @@ function dashboardSnapshot(caseCount: number) {
             score: 1,
           },
         ],
+        adapter: "app.adapters.demo_rag",
+      },
+    ],
+    tracePagination: { total: 1, limit: 50, offset: 0, returned: 1 },
+    tagBreakdown: [
+      {
+        tag: "retrieval_required",
+        baselineCaseCount: caseCount,
+        candidateCaseCount: caseCount,
+        candidateFailureCount: 1,
+        candidatePassRate: Math.max(0, (caseCount - 1) / caseCount),
       },
     ],
     gateRules: [
@@ -153,6 +170,8 @@ function runRow(id: string, version: string, cases: number, passRate: number) {
     version,
     suite: "ui-smoke",
     cases,
+    caseCompleted: cases,
+    caseErrored: 0,
     passRate,
     semanticSimilarity: passRate,
     p95LatencyMs: version === "candidate" ? 260 : 120,

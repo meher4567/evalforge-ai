@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -30,3 +33,17 @@ def test_settings_read_groq_key_and_llm_defaults(monkeypatch):
     assert settings.llm_provider == "groq"
     assert settings.llm_model == "llama-test-model"
     assert settings.llm_base_url == "https://example.test/openai/v1"
+
+
+def test_production_configuration_requires_secure_authentication_secrets():
+    with pytest.raises(ValidationError, match="EVALFORGE_AUTH_TOKEN_PEPPER"):
+        Settings(environment="production", api_key=None)
+
+    settings = Settings(
+        environment="production",
+        api_key=None,
+        auth_token_pepper="configured-pepper",
+        bootstrap_token="configured-bootstrap-token",
+        metrics_token="configured-metrics-token",
+    )
+    assert settings.api_key is None

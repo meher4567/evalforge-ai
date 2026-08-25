@@ -35,6 +35,8 @@ uvicorn-*.log
 # Docker / local data
 .docker/
 docker-data/
+backups/
+benchmarks/results/load*
 
 # Editor / OS
 .vscode/

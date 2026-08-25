@@ -22,6 +22,7 @@ EvalForge uses multiple evaluators and then gate rules decide whether the candid
 | `token_f1_overlap` | lexical token overlap with expected answer | score from `0` to `1` |
 | `semantic_similarity` | backward-compatible alias for `token_f1_overlap` | score from `0` to `1` |
 | `embedding_similarity` | sentence-transformer cosine similarity | score from `0` to `1` |
+| `faithfulness` | batched NLI entailment of answer sentences against retrieved context | score from `0` to `1` |
 | `retrieval_hit_rate` | expected document/chunk was retrieved | score `0` or `1` |
 | `forbidden_claim` | hallucination bait appears in answer | pass/fail |
 | `latency_threshold` | case latency under threshold | pass/fail |
@@ -41,7 +42,7 @@ Run pass rate:
 pass_rate = sum(case_pass) / case_count
 ```
 
-Skipped evaluators are excluded from that evaluator's denominator. Errored evaluators are recorded and should be inspected.
+Skipped evaluators are excluded from that evaluator's denominator. Errored evaluators are recorded and count as case failures so infrastructure or evaluator faults cannot silently improve pass rate.
 
 ## Similarity Evaluators
 
@@ -52,6 +53,8 @@ EvalForge now separates lexical overlap from real semantic similarity.
 `semantic_similarity` remains available as a backward-compatible alias for old evaluator configs. It is intentionally marked in result details as an alias for `token_f1_overlap`, so the project does not pretend lexical overlap is an embedding model.
 
 `embedding_similarity` uses `sentence-transformers` with `all-MiniLM-L6-v2` and cosine similarity. It is a real local embedding evaluator, but it is slower than token F1 and should be used for smaller suites or calibration work.
+
+`faithfulness` uses an optional NLI model to score up to five answer sentences against retrieved context in one inference batch. Both ML evaluators require the `ml` dependency group; `GET /api/evaluators` reports whether their modules are available before a config is accepted.
 
 Why keep the lexical path:
 

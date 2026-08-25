@@ -41,7 +41,10 @@ export function MetricCard({ metric }: { metric: MetricSummary }) {
       <div className="metric-card__header">
         <span className="metric-card__icon">{metricIcon(metric)}</span>
         <span>{metric.label}</span>
-        <StatusPill status={metric.status} />
+        <StatusPill
+          status={metric.status}
+          label={metric.status === "not_evaluated" ? "not gated" : undefined}
+        />
       </div>
       <div className={`metric-card__value metric-card__value--${metric.status}`}>
         {formatMetricValue(metric, metric.candidate)}

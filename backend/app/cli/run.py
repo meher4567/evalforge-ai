@@ -81,7 +81,6 @@ async def run_evals(
     sync_mode: bool = False,
 ) -> RunResult:
     """Run a complete eval cycle (baseline + candidate + comparison) via direct DB access."""
-    from app.db.base import Base
     from app.db.session import SessionLocal
     from app.models import (
         AppVersion,
@@ -92,12 +91,6 @@ async def run_evals(
     from app.services.comparison import DEFAULT_GATE_RULES, compute_comparison
     from app.services.run_dispatcher import dispatch_run
     from app.services.run_executor import execute_run
-
-    engine = SessionLocal.kw["bind"]
-
-    # Ensure tables exist
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     async with SessionLocal() as session:
         # Look up entities by name

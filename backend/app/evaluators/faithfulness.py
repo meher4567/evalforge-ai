@@ -68,12 +68,20 @@ def _nli_score(premise: str, hypothesis: str) -> float:
 
     Returns 1.0 (entailment), 0.5 (neutral), or 0.0 (contradiction).
     """
+    return _nli_scores(premise, [hypothesis])[0]
+
+
+def _nli_scores(premise: str, hypotheses: list[str]) -> list[float]:
+    """Score sentence hypotheses in one model batch."""
+    if not hypotheses:
+        return []
+
     tokenizer, model = _load_nli_model()
     import torch
 
     inputs = tokenizer(
-        premise,
-        hypothesis,
+        [premise] * len(hypotheses),
+        hypotheses,
         truncation=True,
         max_length=512,
         return_tensors="pt",
@@ -83,13 +91,20 @@ def _nli_score(premise: str, hypothesis: str) -> float:
     with torch.no_grad():
         logits = model(**inputs).logits
         # DeBERTa NLI model: [contradiction, neutral, entailment]
-        probs = torch.softmax(logits, dim=-1)[0]
+        probabilities = torch.softmax(logits, dim=-1)
 
     # Weighted score: entailment=1.0, neutral=0.5, contradiction=0.0
-    score = float(
-        CONTRADICTION_SCORE * probs[0] + NEUTRAL_SCORE * probs[1] + ENTAILMENT_SCORE * probs[2]
-    )
-    return round(score, 4)
+    return [
+        round(
+            float(
+                CONTRADICTION_SCORE * probs[0]
+                + NEUTRAL_SCORE * probs[1]
+                + ENTAILMENT_SCORE * probs[2]
+            ),
+            4,
+        )
+        for probs in probabilities
+    ]
 
 
 def compute_faithfulness(
@@ -117,9 +132,13 @@ def compute_faithfulness(
         # No context to check against — all sentences are unsupported
         return 0.0, [{"sentence": s, "verdict": "contradiction", "score": 0.0} for s in sentences]
 
+    scores = (
+        _nli_scores(retrieved_context, sentences)
+        if batch
+        else [_nli_score(retrieved_context, sentence) for sentence in sentences]
+    )
     per_sentence = []
-    for sentence in sentences:
-        score = _nli_score(premise=retrieved_context, hypothesis=sentence)
+    for sentence, score in zip(sentences, scores, strict=True):
         if score >= 0.75:
             verdict = "entailment"
         elif score >= 0.35:

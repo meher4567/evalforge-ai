@@ -8,27 +8,47 @@ http://127.0.0.1:8000
 
 ## Health
 
+### `GET /livez`
+
+Reports process liveness without checking dependencies.
+
 ### `GET /healthz`
 
-Returns API, database, and Redis health.
+Returns API, database, Redis, and migration-head health with HTTP 200 for diagnostics.
+
+### `GET /readyz`
+
+Returns the same dependency detail and HTTP 503 unless every dependency is ready and the database is at the current Alembic head.
 
 Without Docker, database and Redis may be degraded.
 
 ## Authentication
 
-By default, local APIs are unauthenticated. If `EVALFORGE_API_KEY` is set, all `/api/*` routes require either:
+Production data endpoints require an organization-scoped session or personal API key. Send either
+credential using:
 
 ```text
-X-EvalForge-Api-Key: <key>
+X-EvalForge-API-Key: <credential>
 ```
 
 or:
 
 ```text
-Authorization: Bearer <key>
+Authorization: Bearer <credential>
 ```
 
-`GET /healthz` remains public so infrastructure can check liveness.
+Local development remains unauthenticated unless `EVALFORGE_API_KEY` is set. Health routes remain
+public. `/metrics` uses its own `EVALFORGE_METRICS_TOKEN`.
+
+- `POST /api/auth/bootstrap` creates the first owner and organization with the one-time
+  `X-EvalForge-Bootstrap-Token` header.
+- `POST /api/auth/login`, `POST /api/auth/logout`, and `GET /api/auth/me` manage sessions.
+- `POST /api/auth/switch-organization` issues a session for another membership.
+- `POST /api/auth/change-password` changes a password and revokes other sessions.
+- `GET|POST /api/auth/api-keys` and `DELETE /api/auth/api-keys/{id}` manage personal keys.
+- Organization and member administration is under `/api/organizations`.
+
+See [authentication.md](authentication.md) for roles and isolation rules.
 
 ## Apps
 
@@ -69,6 +89,8 @@ Returns one app.
 
 Lists versions for one app.
 
+Only explicitly allowed adapter modules can be registered. Inline secret fields are rejected; provider credentials must come from approved environment variables.
+
 ## Suites And Cases
 
 ### `POST /api/apps/{app_id}/suites`
@@ -78,6 +100,10 @@ Lists versions for one app.
   "name": "demo-suite"
 }
 ```
+
+### `GET /api/apps/{app_id}/suites`
+
+Lists suites for one app.
 
 ### `POST /api/suites/{suite_id}/cases/import`
 
@@ -130,6 +156,14 @@ Returns case count and tag distribution.
 }
 ```
 
+Unknown, duplicate, or unavailable optional evaluators are rejected. Use `GET /api/evaluators` to discover evaluator availability and required dependency groups.
+
+## Gate Rules
+
+### `POST /api/gate-rules`
+
+Creates a named, validated policy. Supply its ID as `gate_rules_id` when creating a comparison. `GET /api/gate-rules` and `GET /api/gate-rules/{id}` retrieve policies.
+
 ## Runs
 
 ### `POST /api/runs`
@@ -176,6 +210,10 @@ Computes metrics and gate verdict.
 ### `GET /api/comparisons/{comparison_id}`
 
 Returns comparison plus regression report.
+
+### `GET /api/comparisons`
+
+Lists recent computed comparisons and reports.
 
 ### `GET /api/comparisons/{comparison_id}/gate-decision`
 
@@ -287,7 +325,7 @@ Returns `404` when no computed comparison exists.
 
 ### `GET /api/dashboard/demo`
 
-Returns the committed benchmark-backed demo snapshot with the same dashboard fields. This is useful when the database is empty or the frontend is being developed separately.
+Returns the committed benchmark-backed demo snapshot with the same dashboard fields and `dataSource: "demo"`. The frontend calls this endpoint only when built or started with `VITE_DEMO_MODE=true`.
 
 ## Error Semantics
 
@@ -295,4 +333,5 @@ The current API uses FastAPI default error responses. Important status codes:
 
 - `404`: entity or latest dashboard comparison not found
 - `409`: invalid comparison state, such as comparing unfinished runs
-- `422`: request validation failed
+- `422`: request validation failed or run resources are incompatible
+- `503`: a persisted run could not be submitted to the worker broker

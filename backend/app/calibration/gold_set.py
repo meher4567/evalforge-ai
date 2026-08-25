@@ -1,17 +1,20 @@
 """
-Hand-labeled calibration gold set (50 RAG QA pairs).
+Author-scored synthetic calibration fixture (50 RAG QA pairs).
 
 Each entry contains:
 - question: RAG question
 - expected_answer: ground-truth answer
-- label_score: 1-5 quality rating assigned by a human labeler (self-labeled)
+- label_score: 1-5 quality rating assigned by the project author
 - label_notes: justification / rubric reasoning
 - evaluator_scores: scores from 6 evaluators on v1_baseline output
 
 This dataset enables computing:
-- Pearson / Spearman correlation between evaluators and human labels
-- Confusion matrix (pass/borderline/fail vs gold labels)
+- Pearson / Spearman correlation inside this constructed fixture
+- Confusion matrix (pass/borderline/fail vs author scores)
 - Named findings about evaluator strengths and weaknesses
+
+This is not an independently labeled gold set and does not establish
+production validity. It exists to exercise the analysis pipeline and rubric.
 
 Rubric used:
   5 = fully correct, all expected facts present, no hallucinations
@@ -32,7 +35,7 @@ class GoldLabelEntry:
     baseline_answer: str
     label_score: int  # 1-5
     label_notes: str
-    semantic_similarity: float
+    token_f1_overlap: float
     keyword_coverage: float
     retrieval_hit: bool
     forbidden_claim_triggered: bool
@@ -40,12 +43,11 @@ class GoldLabelEntry:
     estimated_cost_usd: float
 
 
-# 50 hand-labeled gold-set entries from the 500-case demo dataset.
-# Labeled by the project author against the rubric above.
-# Each entry documents the question, baseline output, human score, and
-# evaluator scores produced by v1_baseline.
+# 50 author-scored entries derived from the deterministic demo dataset.
+# Evaluator scores are committed fixture values, not evidence from an
+# independently reproduced production study.
 
-GOLD_SET: list[GoldLabelEntry] = [
+SYNTHETIC_CALIBRATION_FIXTURE: list[GoldLabelEntry] = [
     GoldLabelEntry(
         "demo-0001",
         "Which Python module is used for virtual environments?",
@@ -755,3 +757,7 @@ GOLD_SET: list[GoldLabelEntry] = [
         0.000004,
     ),
 ]
+
+# Backward-compatible alias for callers created before the study was correctly
+# labeled as synthetic. New code should use SYNTHETIC_CALIBRATION_FIXTURE.
+GOLD_SET = SYNTHETIC_CALIBRATION_FIXTURE

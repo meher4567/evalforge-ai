@@ -129,13 +129,20 @@ async def test_run_execution_stores_items_results_and_traces(client: AsyncClient
     assert all(item["status"] == "completed" for item in items)
     assert all(len(item["results"]) == 6 for item in items)
 
+    paged_items = await client.get(f"/api/runs/{run['id']}/items", params={"limit": 1, "offset": 1})
+    listed_runs = await client.get("/api/runs", params={"limit": 1, "offset": 0})
+    assert paged_items.status_code == 200
+    assert len(paged_items.json()) == 1
+    assert listed_runs.status_code == 200
+    assert listed_runs.json()[0]["id"] == run["id"]
+
     trace_response = await client.get(f"/api/runs/{run['id']}/traces/{items[0]['case_id']}")
     assert trace_response.status_code == 200
     assert trace_response.json()["payload"]["steps"][0]["step"] == "retrieve"
 
 
 @pytest.mark.anyio
-async def test_run_trace_redacts_sensitive_version_config(client: AsyncClient):
+async def test_app_version_rejects_inline_secrets(client: AsyncClient):
     ids = await seed_rag_project(client)
     secret = "test-secret-value"
     version_response = await client.post(
@@ -147,6 +154,7 @@ async def test_run_trace_redacts_sensitive_version_config(client: AsyncClient):
                 "top_k": 1,
                 "api_key": secret,
                 "headers": {"Authorization": f"Bearer {secret}"},
+                "provider": {"access-token": secret},
                 "corpus": [
                     {
                         "doc_id": "venv",
@@ -157,26 +165,9 @@ async def test_run_trace_redacts_sensitive_version_config(client: AsyncClient):
             },
         },
     )
-    assert version_response.status_code == 201
-
-    run_response = await client.post(
-        "/api/runs",
-        json={
-            "app_version_id": version_response.json()["id"],
-            "suite_id": ids["suite_id"],
-            "evaluator_config_id": ids["evaluator_config_id"],
-        },
-    )
-    assert run_response.status_code == 201
-    run = run_response.json()
-    items_response = await client.get(f"/api/runs/{run['id']}/items")
-    item = items_response.json()[0]
-    trace_response = await client.get(f"/api/runs/{run['id']}/traces/{item['case_id']}")
-    payload = trace_response.json()["payload"]
-
-    assert payload["version_config"]["api_key"] == "[REDACTED]"
-    assert payload["version_config"]["headers"]["Authorization"] == "[REDACTED]"
-    assert secret not in str(payload)
+    assert version_response.status_code == 422
+    assert "Inline secrets" in version_response.json()["detail"]
+    assert secret not in str(version_response.json())
 
 
 @pytest.mark.anyio
@@ -221,6 +212,10 @@ async def test_comparison_detects_bad_candidate_regression(client: AsyncClient):
     gate_response = await client.get(f"/api/comparisons/{comparison['id']}/gate-decision")
     assert gate_response.status_code == 200
     assert gate_response.json()["verdict"] == "fail"
+
+    listed = await client.get("/api/comparisons", params={"limit": 1, "offset": 0})
+    assert listed.status_code == 200
+    assert listed.json()[0]["id"] == comparison["id"]
 
 
 @pytest.mark.anyio
@@ -270,3 +265,44 @@ async def test_comparison_ci_report_returns_markdown_gate_artifact(client: Async
     assert payload["metrics"][0]["name"] == "pass_rate"
     assert "EvalForge Deployment Gate" in payload["markdown"]
     assert "http://localhost:5173" in payload["markdown"]
+
+
+@pytest.mark.anyio
+async def test_comparison_rejects_runs_with_different_case_sets(client: AsyncClient):
+    ids = await seed_rag_project(client)
+    cases = (await client.get(f"/api/suites/{ids['suite_id']}/cases")).json()
+    common = {
+        "suite_id": ids["suite_id"],
+        "evaluator_config_id": ids["evaluator_config_id"],
+    }
+    baseline = (
+        await client.post(
+            "/api/runs",
+            json={
+                **common,
+                "app_version_id": ids["baseline_version_id"],
+                "case_ids": [cases[0]["id"]],
+            },
+        )
+    ).json()
+    candidate = (
+        await client.post(
+            "/api/runs",
+            json={
+                **common,
+                "app_version_id": ids["candidate_version_id"],
+                "case_ids": [cases[1]["id"]],
+            },
+        )
+    ).json()
+
+    response = await client.post(
+        "/api/comparisons",
+        json={
+            "baseline_run_id": baseline["id"],
+            "candidate_run_id": candidate["id"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Runs must contain the same evaluation cases"

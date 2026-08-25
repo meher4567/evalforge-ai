@@ -8,17 +8,18 @@ import httpx
 
 from app.adapters.base import AdapterOutput
 from app.adapters.demo_rag import format_prompt, retrieve
+from app.adapters.security import validate_provider_url
 from app.core.config import get_settings
 
 
 def run(question: str, version_config: dict[str, Any]) -> AdapterOutput:
     settings = get_settings()
-    api_key = str(version_config.get("api_key") or settings.groq_api_key or "")
+    api_key = str(settings.groq_api_key or "")
     if not api_key:
         raise ValueError("GROQ_API_KEY is required for app.adapters.groq_chat")
 
     model = str(version_config.get("model") or settings.llm_model)
-    base_url = str(version_config.get("base_url") or settings.llm_base_url)
+    base_url = validate_provider_url(str(version_config.get("base_url") or settings.llm_base_url))
     timeout_seconds = float(version_config.get("timeout_seconds", 30))
 
     trace_steps: list[dict[str, Any]] = []

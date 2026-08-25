@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BookOpen,
   FlaskConical,
   GitCompare,
@@ -11,9 +12,16 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { loadDashboardSnapshot, runDemoEvaluation, type DashboardSnapshot } from "./api/client";
+import {
+  loadDashboardSnapshot,
+  login,
+  runDemoEvaluation,
+  setSessionApiKey,
+  type DashboardSnapshot,
+} from "./api/client";
 import {
   CalibrationPanel,
+  CalibrationUnavailable,
   ComparisonView,
   type FailureFilter,
   OverviewView,
@@ -23,27 +31,10 @@ import {
   TracesView,
 } from "./components/DashboardViews";
 import {
-  benchmarkSummary,
   calibrationSignals,
-  gateRules,
-  metrics,
-  runs,
   scatterPoints,
-  tagBreakdown,
-  traceCases,
-  tracePagination,
   type ViewId,
 } from "./data/demo";
-
-const fallbackSnapshot: DashboardSnapshot = {
-  benchmarkSummary,
-  metrics,
-  runs,
-  traceCases,
-  tracePagination,
-  tagBreakdown,
-  gateRules,
-};
 
 const navItems: Array<{ id: ViewId; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -59,18 +50,23 @@ function TopBar({
   actionMessage,
   onRefresh,
   onRunEvaluation,
+  snapshot,
 }: {
   isRunningEvaluation: boolean;
   actionMessage: string | null;
   onRefresh: () => void;
   onRunEvaluation: () => void;
+  snapshot: DashboardSnapshot | null;
 }) {
+  const summary = snapshot?.benchmarkSummary;
   return (
     <header className="topbar">
       <div className="topbar__selects" aria-label="Workspace filters">
-        <span>Project: Demo RAG QA</span>
-        <span>Dataset: demo_rag_500</span>
-        <span>Branch: main</span>
+        <span>Project: {summary?.projectName ?? "No comparison"}</span>
+        <span>Suite: {summary?.suiteName ?? "—"}</span>
+        <span className={`source-chip source-chip--${snapshot?.dataSource ?? "none"}`}>
+          {snapshot?.dataSource === "live" ? "Live data" : snapshot ? "Demo data" : "No data"}
+        </span>
       </div>
       <div className="topbar__actions">
         <span className="action-message" role="status" aria-live="polite" aria-atomic="true">
@@ -83,9 +79,9 @@ function TopBar({
           onClick={onRunEvaluation}
         >
           <Play size={16} />
-          {isRunningEvaluation ? "Running..." : "Run evaluation"}
+          {isRunningEvaluation ? "Running..." : "Run demo evaluation"}
         </button>
-        <span className="date-chip">May 31, 2026</span>
+        <span className="date-chip">{formatDate(summary?.generatedAt)}</span>
         <button className="icon-button" type="button" aria-label="Refresh dashboard" onClick={onRefresh}>
           <RefreshCcw size={16} />
         </button>
@@ -97,9 +93,11 @@ function TopBar({
 function Sidebar({
   activeView,
   onViewChange,
+  summary,
 }: {
   activeView: ViewId;
   onViewChange: (view: ViewId) => void;
+  summary: DashboardSnapshot["benchmarkSummary"] | null;
 }) {
   return (
     <aside className="sidebar">
@@ -127,42 +125,53 @@ function Sidebar({
       </nav>
       <div className="sidebar-card">
         <span>Active comparison</span>
-        <strong>candidate vs baseline</strong>
-        <button type="button" onClick={() => onViewChange("comparison")}>
+        <strong>
+          {summary
+            ? `${summary.candidateVersion ?? "candidate"} vs ${summary.baselineVersion ?? "baseline"}`
+            : "No persisted comparison"}
+        </strong>
+        <button type="button" disabled={!summary} onClick={() => onViewChange("comparison")}>
           Open comparison
         </button>
       </div>
       <div className="sidebar-footer">
-        <button type="button">
+        <a href="https://github.com/meher4567/evalforge-ai#readme">
           <BookOpen size={17} />
-          Docs
-        </button>
-        <button type="button">
+          <span>Docs</span>
+        </a>
+        <a href="https://github.com/meher4567/evalforge-ai/issues">
           <HelpCircle size={17} />
-          Help
-        </button>
+          <span>Help</span>
+        </a>
       </div>
     </aside>
   );
 }
 
 export function App() {
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot>(fallbackSnapshot);
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [activeView, setActiveView] = useState<ViewId>("overview");
-  const [selectedRunId, setSelectedRunId] = useState(fallbackSnapshot.runs[0].id);
+  const [selectedRunId, setSelectedRunId] = useState("");
   const [selectedTraceIndex, setSelectedTraceIndex] = useState(0);
   const [failureFilter, setFailureFilter] = useState<FailureFilter>("all");
   const [isRunningEvaluation, setIsRunningEvaluation] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    loadDashboardSnapshot().then((loadedSnapshot) => {
-      if (isMounted) {
-        applySnapshot(loadedSnapshot);
-      }
-    });
+    loadDashboardSnapshot()
+      .then((loadedSnapshot) => {
+        if (isMounted) applySnapshot(loadedSnapshot);
+      })
+      .catch((error) => {
+        if (isMounted) setLoadError(formatError(error));
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
 
     return () => {
       isMounted = false;
@@ -170,8 +179,8 @@ export function App() {
   }, []);
 
   const selectedRun = useMemo(
-    () => snapshot.runs.find((run) => run.id === selectedRunId) ?? snapshot.runs[0],
-    [selectedRunId, snapshot.runs],
+    () => snapshot?.runs.find((run) => run.id === selectedRunId) ?? snapshot?.runs[0],
+    [selectedRunId, snapshot],
   );
 
   function selectRun(runId: string) {
@@ -185,19 +194,24 @@ export function App() {
   }
 
   function applySnapshot(loadedSnapshot: DashboardSnapshot) {
-    const nextSnapshot = {
-      ...fallbackSnapshot,
-      ...loadedSnapshot,
-      gateRules: loadedSnapshot.gateRules ?? fallbackSnapshot.gateRules,
-    };
-    setSnapshot(nextSnapshot);
-    setSelectedRunId(nextSnapshot.runs[0]?.id ?? fallbackSnapshot.runs[0].id);
+    setSnapshot(loadedSnapshot);
+    setSelectedRunId(loadedSnapshot.runs[0]?.id ?? "");
     setSelectedTraceIndex(0);
+    setLoadError(null);
   }
 
   async function refreshDashboard() {
-    const loadedSnapshot = await loadDashboardSnapshot();
-    applySnapshot(loadedSnapshot);
+    setIsLoading(true);
+    setActionMessage("Refreshing dashboard");
+    try {
+      applySnapshot(await loadDashboardSnapshot());
+      setActionMessage("Dashboard refreshed");
+    } catch (error) {
+      setLoadError(formatError(error));
+      setActionMessage(`Refresh failed: ${formatError(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function launchEvaluation() {
@@ -216,22 +230,40 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar
+        activeView={activeView}
+        onViewChange={setActiveView}
+        summary={snapshot?.benchmarkSummary ?? null}
+      />
       <div className="workspace">
         <TopBar
           isRunningEvaluation={isRunningEvaluation}
           actionMessage={actionMessage}
           onRefresh={refreshDashboard}
           onRunEvaluation={launchEvaluation}
+          snapshot={snapshot}
         />
         <main className="workspace-main">
-          <PageTitle
-            title={activeView === "runs" ? "Run detail" : navItems.find((item) => item.id === activeView)?.label}
-            selectedVersion={selectedRun.version}
-            benchmark={snapshot.benchmarkSummary.benchmark}
-            caseCount={snapshot.benchmarkSummary.caseCount}
-            meanCost={snapshot.metrics[3].candidate}
-          />
+          {!snapshot && (
+            <DashboardState isLoading={isLoading} error={loadError} onRetry={refreshDashboard} />
+          )}
+
+          {snapshot && selectedRun && (
+            <>
+              <PageTitle
+                title={
+                  activeView === "runs"
+                    ? "Run detail"
+                    : navItems.find((item) => item.id === activeView)?.label
+                }
+                selectedVersion={selectedRun.version}
+                benchmark={snapshot.benchmarkSummary.benchmark}
+                caseCount={snapshot.benchmarkSummary.caseCount}
+                meanCost={
+                  snapshot.metrics.find((metric) => metric.key === "cost_mean_usd")?.candidate ?? 0
+                }
+                gateVerdict={snapshot.benchmarkSummary.gateVerdict}
+              />
 
           {activeView === "overview" && (
             <OverviewView
@@ -267,13 +299,146 @@ export function App() {
             />
           )}
           {activeView === "calibration" && (
-            <CalibrationPanel signals={calibrationSignals} points={scatterPoints} />
+            snapshot.dataSource === "demo" ? (
+              <CalibrationPanel signals={calibrationSignals} points={scatterPoints} />
+            ) : (
+              <CalibrationUnavailable />
+            )
           )}
-          {activeView === "settings" && <SettingsView rules={snapshot.gateRules} />}
+          {activeView === "settings" && (
+            <SettingsView
+              rules={snapshot.gateRules}
+              verdict={snapshot.benchmarkSummary.gateVerdict}
+            />
+          )}
+            </>
+          )}
         </main>
       </div>
     </div>
   );
+}
+
+function DashboardState({
+  isLoading,
+  error,
+  onRetry,
+}: {
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [organizationSlug, setOrganizationSlug] = useState("");
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const authenticationRequired = error?.includes("401") ?? false;
+
+  function authenticate() {
+    setSessionApiKey(apiKey);
+    onRetry();
+  }
+
+  async function signIn() {
+    setIsSigningIn(true);
+    setSignInError(null);
+    try {
+      await login({ email, password, organizationSlug });
+      onRetry();
+    } catch (signInFailure) {
+      setSignInError(formatError(signInFailure));
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  return (
+    <section className="panel dashboard-state" aria-label="Dashboard status">
+      <AlertTriangle size={24} />
+      <h1>{isLoading ? "Loading persisted comparison" : "No comparison to display"}</h1>
+      <p>{error ?? "Connecting to the EvalForge API…"}</p>
+      {authenticationRequired && (
+        <div className="authentication-options">
+          <form
+            className="authentication-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void signIn();
+            }}
+          >
+            <strong>Sign in</strong>
+            <label htmlFor="evalforge-email">Email</label>
+            <input
+              id="evalforge-email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+            <label htmlFor="evalforge-password">Password</label>
+            <input
+              id="evalforge-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <label htmlFor="evalforge-organization">Organization slug (optional)</label>
+            <input
+              id="evalforge-organization"
+              autoComplete="organization"
+              value={organizationSlug}
+              onChange={(event) => setOrganizationSlug(event.target.value)}
+            />
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={isSigningIn || !email.trim() || !password}
+            >
+              {isSigningIn ? "Signing in…" : "Sign in"}
+            </button>
+            {signInError && <small role="alert">{signInError}</small>}
+          </form>
+          <span className="authentication-divider">or use an automation credential</span>
+          <form
+            className="authentication-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              authenticate();
+            }}
+          >
+            <label htmlFor="evalforge-api-key">Access token or API key</label>
+            <input
+              id="evalforge-api-key"
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+            <button className="secondary-action" type="submit" disabled={!apiKey.trim()}>
+              Use credential
+            </button>
+            <small>Credentials stay in memory and are cleared when the page refreshes.</small>
+          </form>
+        </div>
+      )}
+      {!isLoading && (
+        <button className="secondary-action" type="button" onClick={onRetry}>
+          Retry
+        </button>
+      )}
+    </section>
+  );
+}
+
+function formatDate(value: string | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function formatError(error: unknown): string {

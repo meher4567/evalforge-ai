@@ -661,6 +661,76 @@ async def test_run_with_nonexistent_version_returns_404(client: AsyncClient):
 
 
 @pytest.mark.anyio
+async def test_run_rejects_version_and_suite_from_different_apps(client: AsyncClient):
+    ids = await _seed_project(client)
+    other_app = await client.post(
+        "/api/apps", json={"name": "other-app", "description": "isolation test"}
+    )
+    other_suite = await client.post(
+        f"/api/apps/{other_app.json()['id']}/suites", json={"name": "other-suite"}
+    )
+
+    response = await client.post(
+        "/api/runs",
+        json={
+            "app_version_id": ids["app_version_id"],
+            "suite_id": other_suite.json()["id"],
+            "evaluator_config_id": ids["evaluator_config_id"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "same app" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_run_rejects_cases_outside_the_selected_suite(client: AsyncClient):
+    ids = await _seed_project(client)
+
+    response = await client.post(
+        "/api/runs",
+        json={
+            "app_version_id": ids["app_version_id"],
+            "suite_id": ids["suite_id"],
+            "evaluator_config_id": ids["evaluator_config_id"],
+            "case_ids": ["not-in-this-suite"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "not-in-this-suite" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_dispatch_failure_is_persisted_and_returns_503(client: AsyncClient):
+    ids = await _seed_project(client)
+
+    with (
+        patch("app.api.runs.get_settings") as mock_settings,
+        patch("app.services.run_dispatcher.chord") as mock_chord_builder,
+    ):
+        mock_settings.return_value = Settings(run_mode="celery")
+        mock_chord_builder.return_value.apply_async.side_effect = RuntimeError("broker unavailable")
+
+        response = await client.post(
+            "/api/runs",
+            json={
+                "app_version_id": ids["app_version_id"],
+                "suite_id": ids["suite_id"],
+                "evaluator_config_id": ids["evaluator_config_id"],
+            },
+        )
+
+    assert response.status_code == 503
+    run_id = response.json()["detail"]["run_id"]
+    run = (await client.get(f"/api/runs/{run_id}")).json()
+    items = (await client.get(f"/api/runs/{run_id}/items")).json()
+    assert run["status"] == "failed"
+    assert run["case_errored"] == run["case_count"] == 3
+    assert all(item["status"] == "errored" for item in items)
+
+
+@pytest.mark.anyio
 async def test_get_nonexistent_run_returns_404(client: AsyncClient):
     """GET a run that does not exist returns 404."""
     response = await client.get("/api/runs/nonexistent-run-id")

@@ -16,7 +16,7 @@ import json
 import logging
 import time
 
-from app.db.base import Base, new_uuid
+from app.db.base import new_uuid
 from app.db.session import SessionLocal
 from app.demo.dataset import build_demo_corpus, build_eval_cases
 from app.models import (
@@ -80,11 +80,6 @@ async def seed_everything(case_count: int = 500, run_mode: str = "sync") -> dict
     """
     if run_mode not in ("sync", "celery"):
         raise ValueError(f"Invalid run_mode: {run_mode}. Must be 'sync' or 'celery'.")
-
-    engine = SessionLocal.kw["bind"]
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     async with SessionLocal() as session:
         # 1. Create app

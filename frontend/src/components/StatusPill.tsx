@@ -1,5 +1,15 @@
 interface StatusPillProps {
-  status: "pass" | "warn" | "fail" | "completed" | "partial" | "running";
+  status:
+    | "pass"
+    | "warn"
+    | "fail"
+    | "completed"
+    | "partial"
+    | "running"
+    | "failed"
+    | "cancelled"
+    | "timed_out"
+    | "not_evaluated";
   label?: string;
 }
 

@@ -1,20 +1,47 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { benchmarkSummary, gateRules, metrics, runs, traceCases } from "./data/demo";
+import { setSessionApiKey } from "./api/client";
+import {
+  benchmarkSummary,
+  gateRules,
+  metrics,
+  runs,
+  tagBreakdown,
+  traceCases,
+  tracePagination,
+} from "./data/demo";
+
+const demoSnapshot = {
+  dataSource: "demo" as const,
+  comparisonId: null,
+  benchmarkSummary,
+  metrics,
+  runs,
+  traceCases,
+  tracePagination,
+  tagBreakdown,
+  gateRules,
+};
+
+beforeEach(() => {
+  setSessionApiKey("");
+  vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(demoSnapshot)));
+});
 
 afterEach(() => {
+  setSessionApiKey("");
   vi.unstubAllGlobals();
 });
 
 describe("EvalForge dashboard", () => {
-  it("renders the measured gate verdict on the overview", () => {
+  it("renders the measured gate verdict on the overview", async () => {
     render(<App />);
 
     expect(screen.getByText("EvalForge AI")).toBeInTheDocument();
-    expect(screen.getByText("Regression blocked")).toBeInTheDocument();
-    expect(screen.getByText("500 cases")).toBeInTheDocument();
-    expect(screen.getByLabelText("Comparison summary")).toBeInTheDocument();
+    expect(await screen.findByText("Regression blocked")).toBeInTheDocument();
+    expect(await screen.findByText("500 cases")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Comparison summary")).toBeInTheDocument();
   });
 
   it("keeps primary navigation buttons accessible when labels collapse", () => {
@@ -26,41 +53,41 @@ describe("EvalForge dashboard", () => {
     );
   });
 
-  it("filters failures from the comparison screen", () => {
+  it("filters failures from the comparison screen", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Comparison" }));
-    fireEvent.click(screen.getByRole("button", { name: "forbidden claim" }));
+    fireEvent.click(await screen.findByRole("button", { name: "forbidden claim" }));
 
     expect(screen.getByText("demo-0010")).toBeInTheDocument();
     expect(screen.queryByText("demo-0001")).not.toBeInTheDocument();
   });
 
-  it("shows per-tag quality breakdown on the comparison screen", () => {
+  it("shows per-tag quality breakdown on the comparison screen", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Comparison" }));
 
-    expect(screen.getByRole("heading", { name: "Tag breakdown" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tag breakdown" })).toBeInTheDocument();
     expect(screen.getByText("Candidate pass rate by first case tag")).toBeInTheDocument();
   });
 
-  it("moves through failed traces", () => {
+  it("moves through failed traces", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Traces" }));
-    expect(screen.getByText("demo-0001 | hallucination_risk")).toBeInTheDocument();
+    expect(await screen.findByText("demo-0001 | hallucination_risk")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next failed case" }));
     expect(screen.getByText("demo-0007 | reasoning_required")).toBeInTheDocument();
   });
 
-  it("marks calibration as a preview, not a finished gold-set result", () => {
+  it("marks calibration as a preview, not a finished gold-set result", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Calibration" }));
 
-    expect(screen.getByText("Calibration preview")).toBeInTheDocument();
+    expect(await screen.findByText("Calibration preview")).toBeInTheDocument();
     expect(screen.getByText("methodology pending")).toBeInTheDocument();
   });
 
@@ -68,6 +95,8 @@ describe("EvalForge dashboard", () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
+          dataSource: "live",
+          comparisonId: "comparison-321",
           benchmarkSummary: {
             ...benchmarkSummary,
             caseCount: 321,
@@ -76,6 +105,8 @@ describe("EvalForge dashboard", () => {
           metrics,
           runs,
           traceCases,
+          tracePagination,
+          tagBreakdown,
           gateRules,
         }),
         {
@@ -94,15 +125,14 @@ describe("EvalForge dashboard", () => {
 
   it("launches a fresh evaluation from the dashboard action bar", async () => {
     const initialSnapshot = {
+      ...demoSnapshot,
+      dataSource: "live" as const,
+      comparisonId: "comparison-initial",
       benchmarkSummary: {
         ...benchmarkSummary,
         caseCount: 2,
         totalExecutions: 4,
       },
-      metrics,
-      runs,
-      traceCases,
-      gateRules,
     };
     const refreshedSnapshot = {
       ...initialSnapshot,
@@ -144,7 +174,7 @@ describe("EvalForge dashboard", () => {
     render(<App />);
 
     expect(await screen.findByText("2 cases")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run demo evaluation" }));
 
     expect(screen.getByRole("status")).toHaveTextContent("Creating evaluation project");
     expect(await screen.findByText("3 cases")).toBeInTheDocument();
@@ -159,11 +189,10 @@ describe("EvalForge dashboard", () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/dashboard/latest") {
         return jsonResponse({
+          ...demoSnapshot,
+          dataSource: "live",
+          comparisonId: "comparison-500",
           benchmarkSummary,
-          metrics,
-          runs,
-          traceCases,
-          gateRules,
         });
       }
       if (url === "/api/apps") {
@@ -179,17 +208,51 @@ describe("EvalForge dashboard", () => {
     render(<App />);
 
     await screen.findByText("500 cases");
-    fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run demo evaluation" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Evaluation failed: API returned 409 for /api/apps",
     );
   });
+
+  it("shows an honest empty state instead of silent demo data", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("missing", { status: 404 })),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("No comparison to display")).toBeInTheDocument();
+    expect(screen.queryByText("Regression blocked")).not.toBeInTheDocument();
+    expect(screen.getByText(/enable VITE_DEMO_MODE=true/)).toBeInTheDocument();
+  });
+
+  it("authenticates with a tab-scoped API key", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: "Valid EvalForge API key required" }, 401))
+      .mockResolvedValueOnce(jsonResponse({ ...demoSnapshot, dataSource: "live" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const input = await screen.findByLabelText("Access token or API key");
+    fireEvent.change(input, { target: { value: "session-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use credential" }));
+
+    expect(await screen.findByText("Regression blocked")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/dashboard/latest",
+      expect.objectContaining({ headers: { "X-EvalForge-Api-Key": "session-secret" } }),
+    );
+  });
 });
 
-function jsonResponse(body: unknown): Response {
+function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }

@@ -9,6 +9,7 @@ from app.adapters.loader import load_adapter
 from app.db.base import utc_now
 from app.evaluators.engine import evaluate_case
 from app.models import (
+    App,
     AppVersion,
     EvalCase,
     EvalResult,
@@ -19,6 +20,7 @@ from app.models import (
     EvaluatorConfig,
     Trace,
 )
+from app.services.errors import InvalidRunRequestError, ResourceNotFoundError
 
 SENSITIVE_CONFIG_PARTS = (
     "api_key",
@@ -37,22 +39,40 @@ async def execute_run(
     suite_id: str,
     evaluator_config_id: str,
     case_ids: list[str] | None = None,
+    organization_id: str = "00000000-0000-0000-0000-000000000001",
 ) -> EvalRun:
-    version = await session.get(AppVersion, app_version_id)
-    suite = await session.get(EvalSuite, suite_id)
-    evaluator_config = await session.get(EvaluatorConfig, evaluator_config_id)
+    version = await session.scalar(
+        select(AppVersion)
+        .join(App, App.id == AppVersion.app_id)
+        .where(AppVersion.id == app_version_id, App.organization_id == organization_id)
+    )
+    suite = await session.scalar(
+        select(EvalSuite)
+        .join(App, App.id == EvalSuite.app_id)
+        .where(EvalSuite.id == suite_id, App.organization_id == organization_id)
+    )
+    evaluator_config = await session.scalar(
+        select(EvaluatorConfig).where(
+            EvaluatorConfig.id == evaluator_config_id,
+            EvaluatorConfig.organization_id == organization_id,
+        )
+    )
     if version is None:
-        raise ValueError("App version not found")
+        raise ResourceNotFoundError("App version not found")
     if suite is None:
-        raise ValueError("Eval suite not found")
+        raise ResourceNotFoundError("Eval suite not found")
     if evaluator_config is None:
-        raise ValueError("Evaluator config not found")
+        raise ResourceNotFoundError("Evaluator config not found")
+    if version.app_id != suite.app_id:
+        raise InvalidRunRequestError("App version and eval suite must belong to the same app")
 
     cases = await load_suite_cases(session, suite_id, case_ids)
+    validate_selected_cases(cases, case_ids)
     adapter = load_adapter(version.adapter_module)
     now = utc_now()
 
     run = EvalRun(
+        organization_id=organization_id,
         app_version_id=app_version_id,
         suite_id=suite_id,
         evaluator_config_id=evaluator_config_id,
@@ -96,6 +116,7 @@ async def execute_run(
                             "retrieved_chunks": output.retrieved_chunks,
                         },
                         "metadata": {
+                            "adapter_module": version.adapter_module,
                             "model_used": output.model_used,
                             "prompt_used": output.prompt_used,
                             "latency_ms": output.latency_ms,
@@ -148,6 +169,21 @@ async def load_suite_cases(
         statement = statement.where(EvalCase.id.in_(case_ids))
     result = await session.scalars(statement)
     return list(result)
+
+
+def validate_selected_cases(cases: list[EvalCase], case_ids: list[str] | None) -> None:
+    if case_ids is None:
+        if not cases:
+            raise InvalidRunRequestError("No cases found in suite")
+        return
+    if len(case_ids) != len(set(case_ids)):
+        raise InvalidRunRequestError("case_ids must not contain duplicates")
+    found_ids = {case.id for case in cases}
+    missing_ids = sorted(set(case_ids) - found_ids)
+    if missing_ids:
+        raise InvalidRunRequestError(
+            f"Cases do not belong to the selected suite: {', '.join(missing_ids)}"
+        )
 
 
 def extract_question(case_payload: dict) -> str:

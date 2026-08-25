@@ -51,6 +51,8 @@ async def test_demo_dashboard_snapshot_returns_benchmark_backed_payload(client):
     assert response.status_code == 200
     payload = response.json()
 
+    assert payload["dataSource"] == "demo"
+    assert payload["comparisonId"] is None
     assert payload["benchmarkSummary"]["caseCount"] == 500
     assert payload["benchmarkSummary"]["gateVerdict"] == "fail"
     assert payload["metrics"][0]["key"] == "pass_rate"
@@ -84,14 +86,22 @@ async def test_latest_dashboard_snapshot_aggregates_persisted_comparison(client:
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["dataSource"] == "live"
+    assert payload["comparisonId"] == ids["comparison"]["id"]
+    assert payload["benchmarkSummary"]["projectName"] == "demo-rag"
+    assert payload["benchmarkSummary"]["suiteName"] == "demo-suite"
     assert payload["benchmarkSummary"]["caseCount"] == 2
     assert payload["benchmarkSummary"]["gateVerdict"] == "fail"
     assert payload["metrics"][0]["key"] == "pass_rate"
     assert payload["runs"][0]["id"] == ids["candidate_run"]["id"]
     assert payload["runs"][1]["id"] == ids["baseline_run"]["id"]
+    assert payload["runs"][0]["caseCompleted"] == 2
+    assert payload["runs"][0]["caseErrored"] == 0
     assert payload["traceCases"][0]["id"] == "case-001"
     assert payload["traceCases"][0]["retrievalHit"] is True
     assert payload["traceCases"][0]["chunks"][0]["docId"] == "venv"
+    assert payload["traceCases"][0]["chunks"][0]["text"]
+    assert payload["traceCases"][0]["adapter"] == "app.adapters.demo_rag"
 
 
 @pytest.mark.anyio
@@ -176,3 +186,60 @@ async def test_latest_dashboard_snapshot_includes_tag_breakdown(client: AsyncCli
             "candidatePassRate": 0.0,
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_latest_dashboard_surfaces_execution_failures_without_traces(client: AsyncClient):
+    ids = await seed_rag_project(client)
+    baseline = (
+        await client.post(
+            "/api/runs",
+            json={
+                "app_version_id": ids["baseline_version_id"],
+                "suite_id": ids["suite_id"],
+                "evaluator_config_id": ids["evaluator_config_id"],
+            },
+        )
+    ).json()
+    broken_version = (
+        await client.post(
+            f"/api/apps/{ids['app_id']}/versions",
+            json={
+                "name": "broken-adapter-config",
+                "adapter_module": "app.adapters.demo_rag",
+                "config": {"top_k": "not-an-integer"},
+            },
+        )
+    ).json()
+    broken_run = (
+        await client.post(
+            "/api/runs",
+            json={
+                "app_version_id": broken_version["id"],
+                "suite_id": ids["suite_id"],
+                "evaluator_config_id": ids["evaluator_config_id"],
+            },
+        )
+    ).json()
+    assert broken_run["status"] == "partial"
+    comparison = (
+        await client.post(
+            "/api/comparisons",
+            json={
+                "baseline_run_id": baseline["id"],
+                "candidate_run_id": broken_run["id"],
+            },
+        )
+    ).json()
+
+    response = await client.get("/api/dashboard/latest", params={"comparison_id": comparison["id"]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tracePagination"]["total"] == 2
+    assert payload["tagBreakdown"][0]["candidateFailureCount"] == 2
+    assert payload["traceCases"][0]["evaluator"] == "execution"
+    assert payload["traceCases"][0]["candidateAnswer"] == ""
+    assert payload["traceCases"][0]["chunks"] == []
+    assert payload["traceCases"][0]["adapter"] == "app.adapters.demo_rag"
+    assert "invalid literal" in payload["traceCases"][0]["reason"]

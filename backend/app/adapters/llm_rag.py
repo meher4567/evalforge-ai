@@ -9,6 +9,7 @@ from typing import Any
 
 from app.adapters.base import AdapterOutput
 from app.adapters.demo_rag import DEFAULT_CORPUS, format_prompt, retrieve
+from app.adapters.security import validate_api_key_environment, validate_provider_url
 from app.evaluators.text import tokenize
 
 SYSTEM_PROMPT = (
@@ -71,7 +72,10 @@ def _call_ollama(
     prompt: str,
     timeout_seconds: float,
 ) -> str:
-    base_url = str(version_config.get("base_url", "http://localhost:11434")).rstrip("/")
+    base_url = validate_provider_url(
+        str(version_config.get("base_url", "http://localhost:11434")),
+        allow_local=True,
+    )
     payload = {
         "model": model,
         "stream": False,
@@ -93,8 +97,12 @@ def _call_openai_compatible(
     prompt: str,
     timeout_seconds: float,
 ) -> str:
-    base_url = str(version_config.get("base_url", "https://api.openai.com/v1")).rstrip("/")
-    api_key_env = str(version_config.get("api_key_env", "OPENAI_API_KEY"))
+    base_url = validate_provider_url(
+        str(version_config.get("base_url", "https://api.openai.com/v1"))
+    )
+    api_key_env = validate_api_key_environment(
+        str(version_config.get("api_key_env", "OPENAI_API_KEY"))
+    )
     api_key = os.getenv(api_key_env)
     if not api_key:
         raise RuntimeError(f"Missing API key environment variable: {api_key_env}")

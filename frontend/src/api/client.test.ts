@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadDashboardSnapshot, runDemoEvaluation, type DashboardSnapshot } from "./client";
+import {
+  login,
+  loadDashboardSnapshot,
+  runDemoEvaluation,
+  setSessionApiKey,
+  type DashboardSnapshot,
+} from "./client";
 import {
   benchmarkSummary,
   gateRules,
@@ -12,6 +18,8 @@ import {
 
 function snapshotWithCaseCount(caseCount: number): DashboardSnapshot {
   return {
+    dataSource: "live",
+    comparisonId: `comparison-${caseCount}`,
     benchmarkSummary: {
       ...benchmarkSummary,
       caseCount,
@@ -41,6 +49,7 @@ function apiResponse(body: unknown, status = 200): Response {
 }
 
 afterEach(() => {
+  setSessionApiKey("");
   vi.unstubAllGlobals();
 });
 
@@ -50,7 +59,7 @@ describe("loadDashboardSnapshot", () => {
     const fetchMock = vi.fn(async () => jsonResponse(latestSnapshot));
     vi.stubGlobal("fetch", fetchMock);
 
-    const snapshot = await loadDashboardSnapshot();
+    const snapshot = await loadDashboardSnapshot("", true);
 
     expect(snapshot.benchmarkSummary.caseCount).toBe(321);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -65,7 +74,7 @@ describe("loadDashboardSnapshot", () => {
       .mockResolvedValueOnce(jsonResponse(demoSnapshot));
     vi.stubGlobal("fetch", fetchMock);
 
-    const snapshot = await loadDashboardSnapshot();
+    const snapshot = await loadDashboardSnapshot("", true);
 
     expect(snapshot.benchmarkSummary.caseCount).toBe(500);
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/dashboard/latest");
@@ -80,10 +89,65 @@ describe("loadDashboardSnapshot", () => {
     const fetchMock = vi.fn(async () => htmlResponse);
     vi.stubGlobal("fetch", fetchMock);
 
-    const snapshot = await loadDashboardSnapshot();
+    const snapshot = await loadDashboardSnapshot("", true);
 
     expect(snapshot.benchmarkSummary.caseCount).toBe(benchmarkSummary.caseCount);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not silently substitute demo data in normal mode", async () => {
+    const fetchMock = vi.fn(async () => new Response("missing", { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadDashboardSnapshot("", false)).rejects.toThrow(
+      "Unable to load a persisted comparison",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/latest");
+  });
+});
+
+describe("login", () => {
+  it("keeps the organization-scoped session token in memory only", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/auth/login") {
+        return apiResponse({
+          access_token: "efs_session-token",
+          role: "evaluator",
+          organization: { id: "org-1", name: "Alpha", slug: "alpha" },
+          user: { id: "user-1", email: "user@example.com", display_name: "User" },
+        });
+      }
+      if (url === "/api/dashboard/latest") {
+        return jsonResponse(snapshotWithCaseCount(1));
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const principal = await login({
+      email: "user@example.com",
+      password: "password-long-enough",
+      organizationSlug: "alpha",
+    });
+
+    expect(principal.role).toBe("evaluator");
+    expect(window.sessionStorage.length).toBe(0);
+    await loadDashboardSnapshot("", false);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "user@example.com",
+          password: "password-long-enough",
+          organization_slug: "alpha",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/dashboard/latest", {
+      headers: { "X-EvalForge-Api-Key": "efs_session-token" },
+    });
   });
 });
 
@@ -184,5 +248,28 @@ describe("runDemoEvaluation", () => {
       "/api/comparisons",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("stops immediately when a run reaches a non-comparable terminal state", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/apps") return apiResponse({ id: "app-1" }, 201);
+      if (url === "/api/apps/app-1/versions") {
+        const callCount = fetchMock.mock.calls.filter((call) => call[0] === url).length;
+        return apiResponse({ id: callCount === 1 ? "baseline-version" : "candidate-version" }, 201);
+      }
+      if (url === "/api/apps/app-1/suites") return apiResponse({ id: "suite-1" }, 201);
+      if (url === "/api/suites/suite-1/cases/import") return apiResponse({ imported: 2 }, 201);
+      if (url === "/api/evaluator-configs") return apiResponse({ id: "evaluator-config" }, 201);
+      if (url === "/api/runs") {
+        return apiResponse({ id: "baseline-run", status: "timed_out" }, 201);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runDemoEvaluation({ runLabel: "timed-out" })).rejects.toThrow(
+      "ended with status timed_out",
+    );
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/comparisons")).toBe(false);
   });
 });

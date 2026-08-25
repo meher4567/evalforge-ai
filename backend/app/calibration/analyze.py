@@ -1,6 +1,6 @@
 """
 Calibration analysis CLI: computes Pearson, Spearman, confusion matrix,
-FPR, FNR from the hand-labeled gold set.
+FPR and FNR from the author-scored synthetic calibration fixture.
 
 Usage:
     uv run python -m app.calibration.analyze
@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 
-from app.calibration.gold_set import GOLD_SET
+from app.calibration.gold_set import SYNTHETIC_CALIBRATION_FIXTURE
 from app.services.calibration import (
     confusion_matrix,
     pearson_correlation,
@@ -23,17 +23,26 @@ logger = logging.getLogger("evalforge.calibration")
 
 
 def analyze_calibration() -> dict:
-    """Compute calibration metrics and named findings from the gold set."""
-    gold_labels = [entry.label_score for entry in GOLD_SET]
+    """Compute descriptive metrics for the synthetic fixture."""
+    entries = SYNTHETIC_CALIBRATION_FIXTURE
+    gold_labels = [entry.label_score for entry in entries]
 
     # Per-evaluator analysis
     evaluator_data = {
-        "semantic_similarity": [entry.semantic_similarity for entry in GOLD_SET],
-        "keyword_coverage": [entry.keyword_coverage for entry in GOLD_SET],
+        "token_f1_overlap": [entry.token_f1_overlap for entry in entries],
+        "keyword_coverage": [entry.keyword_coverage for entry in entries],
     }
 
     results: dict = {
-        "gold_set_size": len(GOLD_SET),
+        "study_type": "author_scored_synthetic_fixture",
+        "independent_labelers": 0,
+        "production_validated": False,
+        "limitations": [
+            "Cases are constructed from the deterministic demo dataset.",
+            "Scores were assigned by the project author, without blinded independent review.",
+            "Evaluator values are committed fixture data rather than a production run export.",
+        ],
+        "gold_set_size": len(entries),
         "label_distribution": {},
         "evaluators": {},
         "confusion_matrices": {},
@@ -83,9 +92,9 @@ def analyze_calibration() -> dict:
     # ── Named Findings ──────────────────────────────────────────
     # Finding 1: Keyword coverage vs semantic similarity
     kw_pearson = results["evaluators"]["keyword_coverage"]["pearson_r"]
-    sem_pearson = results["evaluators"]["semantic_similarity"]["pearson_r"]
+    sem_pearson = results["evaluators"]["token_f1_overlap"]["pearson_r"]
     low_keyword_high_label_count = len(
-        [e for e in GOLD_SET if e.keyword_coverage < 1.0 and e.label_score == 5]
+        [e for e in entries if e.keyword_coverage < 1.0 and e.label_score == 5]
     )
     results["named_findings"].append(
         {
@@ -93,54 +102,55 @@ def analyze_calibration() -> dict:
             "severity": "medium",
             "evidence": (
                 f"keyword_coverage Pearson r = {kw_pearson} vs "
-                f"semantic_similarity Pearson r = {sem_pearson}. "
+                f"token_f1_overlap Pearson r = {sem_pearson}. "
                 f"In {low_keyword_high_label_count} "
-                f"cases, the answer was labeled 5/5 by a human but keyword_coverage < 1.0 "
+                f"fixture cases received an author score of 5/5 but keyword_coverage < 1.0 "
                 "because the question used synonyms "
-                "(e.g., 'isolated environments' for 'virtual environments')."
+                "(e.g., 'isolated environments' for 'virtual environments'). "
+                "This is a hypothesis to validate with independent labels."
             ),
             "recommendation": (
                 "Do not use keyword_coverage as a regression gate for cases with "
-                "synonym-heavy questions. Semantic similarity is a better quality indicator."
+                "synonym-heavy questions without an independently labeled validation set."
             ),
         }
     )
 
-    # Finding 2: Forbidden-claim evaluator catches severe hallucinations reliably
-    triggered_count = sum(1 for e in GOLD_SET if e.forbidden_claim_triggered)
-    triggered_bad = sum(1 for e in GOLD_SET if e.forbidden_claim_triggered and e.label_score <= 2)
+    # Finding 2: Forbidden-claim evaluator detects injected phrases in this fixture.
+    triggered_count = sum(1 for e in entries if e.forbidden_claim_triggered)
+    triggered_bad = sum(1 for e in entries if e.forbidden_claim_triggered and e.label_score <= 2)
     results["named_findings"].append(
         {
-            "title": "Forbidden-claim evaluator catches high-severity hallucinations reliably",
+            "title": "Forbidden-claim evaluator detects the injected fixture phrases",
             "severity": "low",
             "evidence": (
                 f"Of {triggered_count} cases where forbidden_claim fired, "
-                f"{triggered_bad} had human label_score ≤ 2. "
-                f"False positive rate for forbidden_claim on gold-set pass/borderline cases: "
-                f"0% (it only fires on intentionally injected hallucinations)."
+                f"{triggered_bad} received author label_score ≤ 2. "
+                "The phrases and expected detections were constructed together, so this does "
+                "not measure performance on unseen hallucinations."
             ),
             "recommendation": (
-                "Forbidden-claim detection is safe to use as a hard gate. "
-                "A forbidden_claim trigger always signals a real quality problem."
+                "Use exact forbidden-claim matching as one safety signal, then validate its "
+                "coverage and false-positive rate on independently collected outputs."
             ),
         }
     )
 
-    # Finding 3: Semantic similarity is the best single proxy for human judgment
+    # Finding 3: Token overlap tracks the constructed author scores.
     results["named_findings"].append(
         {
-            "title": "Semantic similarity is the best single evaluator proxy for human judgment",
+            "title": "Token overlap tracks this fixture's author scores",
             "severity": "info",
             "evidence": (
-                f"semantic_similarity Spearman ρ = "
-                f"{results['evaluators']['semantic_similarity']['spearman_rho']} "
+                f"token_f1_overlap Spearman ρ = "
+                f"{results['evaluators']['token_f1_overlap']['spearman_rho']} "
                 f"vs keyword_coverage Spearman ρ = "
                 f"{results['evaluators']['keyword_coverage']['spearman_rho']}. "
-                f"Semantic similarity explains more rank-order variance in human scores."
+                "This relationship may be inflated by the fixture construction."
             ),
             "recommendation": (
-                "Use semantic_similarity as the primary quality metric in gate rules. "
-                "Supplement with forbidden_claim for safety-critical applications."
+                "Treat token overlap as a deterministic smoke-test metric. Calibrate semantic "
+                "or judge-based gates on blinded, independently labeled real outputs."
             ),
         }
     )

@@ -4,11 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    paths:
-      - "backend/**"
-      - "benchmarks/worker_throughput.py"
-      - "docker-compose.yml"
-      - ".github/workflows/docker-smoke.yml"
 
 jobs:
   docker-smoke:
@@ -17,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build and start services
         run: docker compose up --build -d
@@ -26,7 +21,7 @@ jobs:
         run: |
           HEALTHY=0
           for i in $(seq 1 60); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/healthz || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/readyz || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "Backend healthy (HTTP $STATUS)"
               HEALTHY=1
@@ -41,13 +36,13 @@ jobs:
             exit 1
           fi
           echo "=== Health check response ==="
-          curl -s http://localhost:8000/healthz | python3 -m json.tool
+          curl -s http://localhost:8000/readyz | python3 -m json.tool
 
       - name: Seed demo data via Celery worker
         id: seed
         run: |
           echo "=== Running seed in Celery mode ==="
-          docker compose exec -T backend uv run python -m app.cli.seed --mode celery --cases 50 2>&1 | tee /tmp/seed.log
+          docker compose exec -T backend python -m app.cli.seed --mode celery --cases 50 2>&1 | tee /tmp/seed.log
           echo "=== Seed output ==="
           cat /tmp/seed.log
           # Verify seed completed successfully by checking for summary in output
@@ -71,8 +66,9 @@ jobs:
           import json, sys
           data = json.load(sys.stdin)
           summary = data.get('benchmarkSummary') or {}
-          assert summary.get('gateVerdict') in ('pass', 'fail', 'degraded'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
+          assert summary.get('gateVerdict') in ('pass', 'warn', 'fail'), f\"Unexpected gateVerdict: {summary.get('gateVerdict')}\"
           assert isinstance(data.get('metrics'), list) and data['metrics'], 'Missing metrics'
+          assert data.get('dataSource') == 'live', f\"Unexpected dataSource: {data.get('dataSource')}\"
           print('Dashboard assertions passed: gateVerdict=' + str(summary.get('gateVerdict')))
           "; then
             echo "Dashboard data is valid"
@@ -80,6 +76,15 @@ jobs:
             echo "ERROR: Dashboard returned invalid or empty data"
             exit 1
           fi
+
+      - name: Verify packaged frontend and API proxy
+        run: |
+          FRONTEND_STATUS=$(curl -s -o /tmp/evalforge-index.html -w "%{http_code}" http://localhost:5173/)
+          API_STATUS=$(curl -s -o /tmp/evalforge-proxied-dashboard.json -w "%{http_code}" http://localhost:5173/api/dashboard/latest)
+          test "$FRONTEND_STATUS" = "200"
+          test "$API_STATUS" = "200"
+          grep -q '<div id="root"></div>' /tmp/evalforge-index.html
+          python3 -c "import json; data=json.load(open('/tmp/evalforge-proxied-dashboard.json')); assert data['dataSource'] == 'live'"
 
       - name: Verify Celery worker processed tasks
         run: |
@@ -110,7 +115,7 @@ jobs:
           cat /tmp/evalforge-worker-throughput/worker_throughput.json | python3 -m json.tool
 
       - name: Upload worker throughput artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: worker-throughput
           path: /tmp/evalforge-worker-throughput/worker_throughput.json
